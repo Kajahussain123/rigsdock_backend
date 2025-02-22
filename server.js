@@ -8,9 +8,13 @@ app.use(cors())
 app.use(express.json())
 
 const tokenRefresh = require('./routes/token/refreshToken')
+const SubcategoryRoutes = require('./routes/admin/SubCategory/SubCategoryRoute');
 
 
 app.use('/token',tokenRefresh)
+
+// admin routes
+app.use('/admin/subcategory',SubcategoryRoutes);
 
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
