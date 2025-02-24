@@ -15,7 +15,7 @@ const subCategorySchema = new mongoose.Schema({
   description: {
     type: String,
   },
-});
+},{timestamps:true});
 
 const subCategory = mongoose.model("SubCategory", subCategorySchema);
 
