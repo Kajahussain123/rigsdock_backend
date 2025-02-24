@@ -8,17 +8,22 @@ app.use(cors())
 app.use(express.json())
 
 const tokenRefresh = require('./routes/token/refreshToken')
-
+const SubcategoryRoutes = require('./routes/admin/SubCategory/SubCategoryRoute');
+const ProductRoutes = require('./routes/admin/Product/ProductRoute');
+const CategoryRoutes = require('./routes/admin/categoryRoute');
 
 app.use('/token',tokenRefresh)
 
-const CategoryRoutes = require('./routes/admin/categoryRoute');
 
+// admin routes
+app.use('/admin/subcategory',SubcategoryRoutes);
+app.use('/admin/product',ProductRoutes);
+app.use('/admin/category', CategoryRoutes); 
 
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
  
-app.use('/admin/category', CategoryRoutes); 
+
 
 
 const PORT = process.env.PORT || 3006; 
