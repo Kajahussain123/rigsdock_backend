@@ -5,13 +5,12 @@ const subCategorySchema = new mongoose.Schema({
     type: String,
     required: [true, "Name is required"],
     unique: true,
-    index: true,
   },
-//   category: {
-//     type: mongoose.Schema.Types.ObjectId,
-//     ref: "Category",
-//     required: true,
-//   },
+  category: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Category",
+    required: true,
+  },
   description: {
     type: String,
   },

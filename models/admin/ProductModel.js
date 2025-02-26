@@ -23,21 +23,19 @@ const productSchema = new mongoose.Schema(
       min: 0,
     },
     brand: { type: String, required: true },
-    // owner: { type: mongoose.Schema.Types.ObjectId, refPath: "ownerType", required: true },
-    // ownerType: { type: String, required: true },
-    // offers: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'Offer',
-    //     default: null,
-    //   },
-    //   category: {
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: "Category",
-    //     required: true,
-    //   },
+    maincategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MainCategory",
+      required: true,
+    },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+    },
     subcategory: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Subcategory",
+      ref: "SubCategory",
       required: true,
     },
     attributes: {

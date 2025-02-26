@@ -2,19 +2,11 @@ const Category = require('../../models/admin/categoryModel');
 const fs = require('fs');
 const path = require('path');
 
-// ✅ Allowed Categories
-const FIXED_CATEGORIES = ["Storage", "Processor", "Memory", "Graphics Card", "Motherboard"];
-
-// 🚀 Create a category (Only from fixed list)
 exports.createCategory = async (req, res) => {
-    const { name, description, status } = req.body;
+    const { name, description, status, maincategory } = req.body;
 
     if (!req.file) {
         return res.status(400).json({ message: 'Category image is required' });
-    }
-
-    if (!FIXED_CATEGORIES.includes(name)) {
-        return res.status(400).json({ message: 'Invalid category name' });
     }
 
     try {
@@ -22,6 +14,7 @@ exports.createCategory = async (req, res) => {
             name,
             image: req.file.filename,
             description,
+            maincategory,
             status: status || 'active',
         });
 
@@ -35,7 +28,7 @@ exports.createCategory = async (req, res) => {
 // 🚀 Get all categories
 exports.getCategories = async (req, res) => {
     try {
-        const categories = await Category.find();
+        const categories = await Category.find().populate('maincategory');
         res.status(200).json(categories);
     } catch (err) {
         res.status(500).json({ message: 'Error fetching categories', error: err.message });
