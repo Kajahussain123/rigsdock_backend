@@ -4,7 +4,7 @@ const path = require("path");
 
 //create a new subcategory
 exports.createProduct = async (req, res) => {
-  const { name, description, price, stock,brand, subcategory, attributes } = req.body;
+  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory } = req.body;
   try {
     console.log(attributes);
     // Validate required fields
@@ -14,7 +14,7 @@ exports.createProduct = async (req, res) => {
 
     const imagePaths = req.files.map((file) => file.filename);
 
-    if (!name || !description || !price || !stock || !subcategory || !brand) {
+    if (!name || !description || !price || !stock || !subcategory || !brand || !category || !maincategory) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -34,6 +34,8 @@ exports.createProduct = async (req, res) => {
       images: imagePaths,
       brand,
       subcategory,
+      category,
+      maincategory,
       attributes: new Map(Object.entries(attributes)),
     });
     await newProduct.save();
@@ -50,7 +52,7 @@ exports.createProduct = async (req, res) => {
 // get all products
 exports.getProducts = async (req,res) => {
   try {
-    const products = await Product.find();
+    const products = await Product.find().populate('maincategory').populate('category').populate('subcategory');
     if(products.length === 0 ){
       return res.status(400).json({ message: 'No products' });
     }

@@ -4,8 +4,7 @@ const categorySchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
-        enum: ["Storage", "Processor", "Memory", "Graphics Card", "Motherboard"], // Fixed categories
-        unique: true, // Ensures no duplicate categories
+        unique: true,
     },
     image: {
         type: String,
@@ -18,6 +17,11 @@ const categorySchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'inactive'],
         default: 'active',
+    },
+    maincategory: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'MainCategory',
+        required: true,
     }
 }, { timestamps: true });
 

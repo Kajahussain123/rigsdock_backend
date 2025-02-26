@@ -5,18 +5,18 @@ const verifyToken = require('../../middleware/jwt');
 const multerConfig = require('../../middleware/multer');
 
 // Create category
-router.post('/create', verifyToken(['admin']), multerConfig.single('image'), categoryController.createCategory);
+router.post('/create',  multerConfig.single('image'), categoryController.createCategory);
 
 // Get all categories
-router.get('/view', verifyToken(['admin']), categoryController.getCategories);
+router.get('/view',  categoryController.getCategories);
 
 // Get a category by ID
-router.get('/view/:id', verifyToken(['admin']), categoryController.getCategoryById);
+router.get('/view/:id',  categoryController.getCategoryById);
 
 // Update category
-router.patch('/update/:id', verifyToken(['admin']), categoryController.updateCategory);
+router.patch('/update/:id',  categoryController.updateCategory);
 
 // Delete category
-router.delete('/delete/:id', verifyToken(['admin']), categoryController.deleteCategory);
+router.delete('/delete/:id',  categoryController.deleteCategory);
 
 module.exports = router;
