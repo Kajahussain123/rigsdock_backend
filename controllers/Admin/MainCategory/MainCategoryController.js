@@ -18,7 +18,7 @@ exports.createMainCategory = async(req,res) => {
           });
     } catch (error) {
         console.error("Error creating product:", error);
-        res.status(500).json({ message: "Internal Server Error", error });
+        res.status(500).json({ message: "Internal Server Error", error:error.message });
     }
 }
 
@@ -26,8 +26,8 @@ exports.createMainCategory = async(req,res) => {
 exports.getMainCategory = async(req,res) => {
     try {
         const mainCategories = await MainCategory.find();
-        if(!mainCategories) {
-            return res.status(404).json({ message: "Product not found" })
+        if(mainCategories.length === 0) {
+            return res.status(404).json({ message: "Main Categories not found" })
         }
         res.status(200).json({ message: "mainCategories fetched successfully",mainCategories })
     } catch (error) {

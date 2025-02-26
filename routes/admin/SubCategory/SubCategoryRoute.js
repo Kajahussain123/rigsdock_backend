@@ -1,23 +1,24 @@
 const express = require("express");
 const router = express.Router();
 const subCategoryController = require("../../../controllers/Admin/SubCategory/SubCategorycontroller");
+const verifyToken = require('../../../middleware/jwt');
 
 // create new subcategory
-router.post("/create", subCategoryController.createSubCategory);
+router.post("/create", verifyToken(['Admin']),subCategoryController.createSubCategory);
 
 // get all subcategories
-router.get("/get", subCategoryController.getSubCategories);
+router.get("/get", verifyToken(['Admin']),subCategoryController.getSubCategories);
 
 // get a subcategory by id
-router.get("/get/:id", subCategoryController.getSubCategoryById);
+router.get("/get/:id", verifyToken(['Admin']),subCategoryController.getSubCategoryById);
 
-// // view subcategory by categoryId
-// router.get('/view/subcategory/:id',subCategoryController.getSubCategoryByCategory);
+// view subcategory by categoryId
+router.get('/view/subcategory/:id',verifyToken(['Admin']),subCategoryController.getSubCategoryByCategory);
 
 // update subcategory
-router.patch("/update/:id", subCategoryController.updateSubCategory);
+router.patch("/update/:id",verifyToken(['Admin']), subCategoryController.updateSubCategory);
 
 // delete subcategory
-router.delete("/delete/:id", subCategoryController.deleteSubCategory);
+router.delete("/delete/:id",verifyToken(['Admin']), subCategoryController.deleteSubCategory);
 
 module.exports = router;

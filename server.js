@@ -13,11 +13,13 @@ const ProductRoutes = require('./routes/admin/Product/ProductRoute');
 const CategoryRoutes = require('./routes/admin/categoryRoute');
 const MainCategoryRouter = require('./routes/admin/MainCategory/mainCategoryRoute');
 const NotificationRouter = require('./routes/admin/Notification/notificationRoute');
+const adminAuth = require('./routes/admin/authRoute');
 
 app.use('/token',tokenRefresh)
 
 
 // admin routes
+app.use('/admin/auth',adminAuth);
 app.use('/admin/subcategory',SubcategoryRoutes);
 app.use('/admin/product',ProductRoutes);
 app.use('/admin/category', CategoryRoutes); 

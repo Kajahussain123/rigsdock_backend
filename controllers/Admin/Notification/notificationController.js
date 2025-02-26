@@ -14,8 +14,8 @@ exports.createNotification = async (req,res) => {
             title,
             image: req.file.filename,
             description,
-            // ownerId: req.user.id,
-            // role: req.user.role === "admin" ? "Admin": "Vendor",
+            ownerId: req.user.id,
+            role: req.user.role
         })
         await newNotification.save();
         res.status(201).json({ message: 'Notification created successfully', notification:newNotification })
@@ -27,8 +27,8 @@ exports.createNotification = async (req,res) => {
 // get all notifications
 exports.getNotifications = async (req,res) => {
     try {
-        const notifications = await Notification.find();
-        if(!notifications){
+        const notifications = await Notification.find().populate({path: 'ownerId', select: '-password'});
+        if(!notifications.length === 0){
             return res.status(404).json({ message: "Notifications not found" })
         }
         res.status(200).json(notifications);
@@ -42,8 +42,7 @@ exports.getNotificationById = async (req,res) => {
     const { id } = req.params;
 
     try {
-        // const notification = await Notification.findById(id).populate("ownerId");
-        const notification = await Notification.findById(id);
+        const notification = await Notification.findById(id).populate({path: 'ownerId', select: '-password'});
         if(!notification){
             return res.status(404).json({ message: "Notification not found" })
         }
@@ -111,8 +110,13 @@ exports.searchNotifications = async (req,res) => {
             query.title = { $regex: title, $options: 'i' };
         }
 
-        const notification = await Notification.find(query);
-        res.status(200).json(notification);
+        const notifications = await Notification.find(query);
+
+        if (notifications.length === 0) {
+            return res.status(404).json({ message: "No matching notifications found" });
+        }
+
+        res.status(200).json(notifications);
     } catch (err) {
         res.status(500).json({ message: 'Error searching Notification', error: err.message });
     }

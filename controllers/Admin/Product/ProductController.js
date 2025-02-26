@@ -6,8 +6,6 @@ const path = require("path");
 exports.createProduct = async (req, res) => {
   const { name, description, price, stock,brand, subcategory, attributes,category,maincategory } = req.body;
   try {
-    console.log(attributes);
-    // Validate required fields
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "At least one product image is required" });
     }
@@ -18,7 +16,6 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Parse attributes if it's a string
     let parsedAttributes;
     try {
       parsedAttributes = typeof attributes === "string" ? JSON.parse(attributes) : attributes;
@@ -36,6 +33,8 @@ exports.createProduct = async (req, res) => {
       subcategory,
       category,
       maincategory,
+      ownerType: req.user.role,
+      owner: req.user.id,
       attributes: new Map(Object.entries(attributes)),
     });
     await newProduct.save();
@@ -68,7 +67,7 @@ exports.getProductById = async (req,res) => {
     const {id} = req.params;
     const product = await Product.findOne({_id:id});
     if(!product){
-      return res.status(400).json({ message: 'No product found' });
+      return res.status(404).json({ message: 'No product found' });
     }
     res.status(200).json({ message: "Product fetched successfully",product })
   } catch (error) {
@@ -82,7 +81,7 @@ exports.updateProduct = async(req,res) => {
     const {id} = req.params;
     const product = await Product.findById(id);
     if(!product){
-      return res.status(400).json({ message: 'No product found' });
+      return res.status(404).json({ message: 'No product found' });
     }
 
     // Handle new images
@@ -209,7 +208,7 @@ exports.deleteProductImage = async (req, res) => {
     });
 
     if (!imageToDelete) {
-      return res.status(400).json({ message: "Image not found in product" });
+      return res.status(404).json({ message: "Image not found in product" });
     }
 
     const basePath = "./uploads";
