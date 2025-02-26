@@ -9,8 +9,8 @@ exports.registerAdmin = async (req, res) => {
       if (existingAdmin) {
         return res.status(409).json({ message: 'Admin already exists' });
       }
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const newAdmin = new Admin({ email, password: hashedPassword });
+    //   const hashedPassword = await bcrypt.hash(password, 10);
+      const newAdmin = new Admin({ email, password });
       await newAdmin.save();
       res.status(201).json({ message: 'Admin registered successfully' });
     } catch (error) {
