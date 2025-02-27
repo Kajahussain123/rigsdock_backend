@@ -14,6 +14,8 @@ const CategoryRoutes = require('./routes/admin/categoryRoute');
 const MainCategoryRouter = require('./routes/admin/MainCategory/mainCategoryRoute');
 const NotificationRouter = require('./routes/admin/Notification/notificationRoute');
 const adminAuth = require('./routes/admin/authRoute');
+const carouselRouter = require('./routes/admin/Carousel/carouselRoute')
+
 const adminVendorRoute = require('./routes/admin/Vendor/VendorRoute');
 
 app.use('/token',tokenRefresh)
@@ -26,7 +28,9 @@ app.use('/admin/product',ProductRoutes);
 app.use('/admin/category', CategoryRoutes); 
 app.use('/admin/maincategory', MainCategoryRouter);
 app.use('/admin/notification', NotificationRouter);
+app.use('/admin/carousel', carouselRouter);
 app.use('/admin/vendor', adminVendorRoute);
+
 
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
