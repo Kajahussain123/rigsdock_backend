@@ -14,6 +14,14 @@ const CategoryRoutes = require('./routes/admin/categoryRoute');
 const MainCategoryRouter = require('./routes/admin/MainCategory/mainCategoryRoute');
 const NotificationRouter = require('./routes/admin/Notification/notificationRoute');
 const adminAuth = require('./routes/admin/authRoute');
+const userAuth = require('./routes/User/authRoutes')
+const userMainCategoryRoutes = require('./routes/User/mainCategoryRoutes')
+const userCategoryRoutes = require('./routes/User/categoryRoutes')
+const userSubCategoryRoutes=require('./routes/User/subCategoryRoutes')
+const userProductRoutes=require('./routes/User/productRoutes')
+const wishlistRoutes=require('./routes/User/wishlistRoutes')
+const cartRoutes=require('./routes/User/cartRoutes')
+const addressRoutes=require('./routes/User/addressRoutes')
 
 app.use('/token',tokenRefresh)
 
@@ -25,6 +33,17 @@ app.use('/admin/product',ProductRoutes);
 app.use('/admin/category', CategoryRoutes); 
 app.use('/admin/maincategory', MainCategoryRouter);
 app.use('/admin/notification', NotificationRouter);
+
+
+// user routes
+app.use('/user/auth',userAuth)
+app.use('/user/maincategory',userMainCategoryRoutes)
+app.use('/user/category',userCategoryRoutes)
+app.use('/user/subcategory',userSubCategoryRoutes)
+app.use('/user/product',userProductRoutes)
+app.use('/user/wishlist',wishlistRoutes)
+app.use('/user/cart',cartRoutes)
+app.use('/user/address',addressRoutes)
 
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
