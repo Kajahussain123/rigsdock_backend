@@ -30,6 +30,7 @@ const userProductRoutes = require("./routes/User/productRoutes");
 const wishlistRoutes = require("./routes/User/wishlistRoutes");
 const cartRoutes = require("./routes/User/cartRoutes");
 const addressRoutes = require("./routes/User/addressRoutes");
+const checkoutRoutes=require('./routes/User/checkoutRoutes')
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -53,6 +54,7 @@ app.use("/user/product", userProductRoutes);
 app.use("/user/wishlist", wishlistRoutes);
 app.use("/user/cart", cartRoutes);
 app.use("/user/address", addressRoutes);
+app.use("/user/checkout",checkoutRoutes)
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));

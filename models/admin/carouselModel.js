@@ -19,7 +19,7 @@ const carouselSchema = new mongoose.Schema(
       default: "active",
     },
   },
-  { timestamps: true } // Automatically adds createdAt and updatedAt fields
+  { timestamps: true } 
 );
 
 const Carousel = mongoose.model("Carousel", carouselSchema);
