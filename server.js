@@ -30,6 +30,8 @@ const OfferRouter = require('./routes/admin/Offer/offerRoutes');
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
+const vendorMaincategory = require('./routes/Vendor/MainCategory/MaincategoryRoute');
+const vendorCategory = require('./routes/Vendor/Category/CategoryRoutes');
 
 
 // User Routes
@@ -62,6 +64,8 @@ app.use('/admin/offer', OfferRouter)
 
 // Vendor Routes
 app.use("/vendor/auth", vendorAuth);
+app.use("/vendor/maincategory", vendorMaincategory);
+app.use("/vendor/category", vendorCategory);
 
 // User Routes
 app.use("/user/auth", userAuth);
