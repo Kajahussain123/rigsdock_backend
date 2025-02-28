@@ -15,6 +15,7 @@ const MainCategoryRouter = require('./routes/admin/MainCategory/mainCategoryRout
 const NotificationRouter = require('./routes/admin/Notification/notificationRoute');
 const adminAuth = require('./routes/admin/authRoute');
 const adminVendorRoute = require('./routes/admin/Vendor/VendorRoute');
+const vendorAuth = require('./routes/Vendor/Auth/AuthRoute');
 
 app.use('/token',tokenRefresh)
 
@@ -27,6 +28,10 @@ app.use('/admin/category', CategoryRoutes);
 app.use('/admin/maincategory', MainCategoryRouter);
 app.use('/admin/notification', NotificationRouter);
 app.use('/admin/vendor', adminVendorRoute);
+
+// vendor routes
+app.use('/vendor/auth', vendorAuth);
+
 
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
