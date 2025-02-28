@@ -19,4 +19,7 @@ router.patch('/update/:id', verifyToken(['Admin']), categoryController.updateCat
 // Delete category
 router.delete('/delete/:id', verifyToken(['Admin']), categoryController.deleteCategory);
 
+router.get('/view/:mainCategoryId',verifyToken(['Admin']), categoryController.getSubCategoriesByMainCategory);
+
+
 module.exports = router;
