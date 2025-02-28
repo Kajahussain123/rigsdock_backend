@@ -31,4 +31,10 @@ router.delete('/delete-vendor-image/:id',verifyToken(['Admin']),vendorController
 //search vendor
 router.get('/search',verifyToken(['Admin']),vendorController.searchVendors);
 
+// get pending vendor requests
+router.get('/vendors/pending',verifyToken(['Admin']),vendorController.getPendingVendors);
+
+//search vendor
+router.patch('/vendors/:vendorId/request',verifyToken(['Admin']),vendorController.handleVendorReq);
+
 module.exports = router;

@@ -21,4 +21,7 @@ router.patch("/update/:id",verifyToken(['Admin']), subCategoryController.updateS
 // delete subcategory
 router.delete("/delete/:id",verifyToken(['Admin']), subCategoryController.deleteSubCategory);
 
+router.get("/view/:mainCategoryId/:categoryId",verifyToken(['Admin']), subCategoryController.getSubCategoriesByMainAndCategory);
+
+
 module.exports = router;

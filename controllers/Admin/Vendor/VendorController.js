@@ -194,3 +194,36 @@ exports.searchVendors = async (req, res) => {
         res.status(500).json({ message: 'Error searching vendors', error: err.message });
     }
 };
+
+// get all pending requests
+exports.getPendingVendors = async (req,res) => {
+    try {
+        const pendingVendors = await Vendor.find({ status: "pending" });
+        if (pendingVendors.length === 0) {
+            return res.status(404).json({ message: "No Pending Vendors" });
+        }
+        res.status(200).json({ message: "Pending vendors fetched successfully", vendors: pendingVendors });
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+}
+
+// handle vendor request
+exports.handleVendorReq = async (req,res) => {
+    try {
+        const {status} = req.body;
+        const {vendorId} = req.params;
+
+        const vendor = await Vendor.findById(vendorId);
+        if (!vendor) {
+            return res.status(404).json({ message: "Vendor not found" });
+        }
+
+        vendor.status = status;
+        await vendor.save();
+
+        res.status(200).json({ message: `Vendor request ${status} successfully`, vendor });
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+}
