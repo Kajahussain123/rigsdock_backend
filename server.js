@@ -23,6 +23,8 @@ const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
+const vendorMaincategory = require('./routes/Vendor/MainCategory/MaincategoryRoute');
+const vendorCategory = require('./routes/Vendor/Category/CategoryRoutes');
 
 // User Routes
 const userAuth = require("./routes/User/authRoutes");
@@ -50,6 +52,8 @@ app.use("/admin/vendor", adminVendorRoute);
 
 // Vendor Routes
 app.use("/vendor/auth", vendorAuth);
+app.use("/vendor/maincategory", vendorMaincategory);
+app.use("/vendor/category", vendorCategory);
 
 // User Routes
 app.use("/user/auth", userAuth);
