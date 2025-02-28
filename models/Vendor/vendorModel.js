@@ -96,6 +96,11 @@ const vendorSchema = new mongoose.Schema({
     role: {
         type: String,
         default: "Vendor"
+    },
+    status: {
+        type: String,
+        enum: ["pending","approved","rejected"],
+        default: "approved"
     }
 },{ timestamps: true });
 

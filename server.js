@@ -21,6 +21,9 @@ const NotificationRouter = require("./routes/admin/Notification/notificationRout
 const carouselRouter = require("./routes/admin/Carousel/carouselRoute");
 const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 
+// Vendor Routes
+const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
+
 // User Routes
 const userAuth = require("./routes/User/authRoutes");
 const userMainCategoryRoutes = require("./routes/User/mainCategoryRoutes");
@@ -30,7 +33,7 @@ const userProductRoutes = require("./routes/User/productRoutes");
 const wishlistRoutes = require("./routes/User/wishlistRoutes");
 const cartRoutes = require("./routes/User/cartRoutes");
 const addressRoutes = require("./routes/User/addressRoutes");
-const checkoutRoutes=require('./routes/User/checkoutRoutes')
+const checkoutRoutes = require("./routes/User/checkoutRoutes");
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -45,6 +48,9 @@ app.use("/admin/notification", NotificationRouter);
 app.use("/admin/carousel", carouselRouter);
 app.use("/admin/vendor", adminVendorRoute);
 
+// Vendor Routes
+app.use("/vendor/auth", vendorAuth);
+
 // User Routes
 app.use("/user/auth", userAuth);
 app.use("/user/maincategory", userMainCategoryRoutes);
@@ -54,7 +60,7 @@ app.use("/user/product", userProductRoutes);
 app.use("/user/wishlist", wishlistRoutes);
 app.use("/user/cart", cartRoutes);
 app.use("/user/address", addressRoutes);
-app.use("/user/checkout",checkoutRoutes)
+app.use("/user/checkout", checkoutRoutes);
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
