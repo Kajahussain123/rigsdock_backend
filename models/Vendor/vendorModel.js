@@ -101,7 +101,17 @@ const vendorSchema = new mongoose.Schema({
         type: String,
         enum: ["pending","approved","rejected"],
         default: "approved"
-    }
+    },
+    pendingUpdates: {
+        type: Map,
+        of: mongoose.Schema.Types.Mixed,
+        default: () => new Map()
+    },
+    updateProfile: {
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+        default: "approved"
+    },
 },{ timestamps: true });
 
 vendorSchema.pre('save',async function(next){

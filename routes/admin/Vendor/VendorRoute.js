@@ -32,9 +32,15 @@ router.delete('/delete-vendor-image/:id',verifyToken(['Admin']),vendorController
 router.get('/search',verifyToken(['Admin']),vendorController.searchVendors);
 
 // get pending vendor requests
-router.get('/vendors/pending',verifyToken(['Admin']),vendorController.getPendingVendors);
+router.get('/pending',verifyToken(['Admin']),vendorController.getPendingVendors);
 
 //search vendor
-router.patch('/vendors/:vendorId/request',verifyToken(['Admin']),vendorController.handleVendorReq);
+router.patch('/:vendorId/request',verifyToken(['Admin']),vendorController.handleVendorReq);
+
+// get update profile pending vendor requests
+router.get('/profile/pending',verifyToken(['Admin']),vendorController.getUpdateProfilePendingVendors);
+
+//search vendor
+router.patch('/profile/:vendorId/update',verifyToken(['Admin']),vendorController.handleVendorUpdateReq);
 
 module.exports = router;
