@@ -15,7 +15,8 @@ exports.createNotification = async (req,res) => {
             image: req.file.filename,
             description,
             ownerId: req.user.id,
-            role: req.user.role
+            role: req.user.role,
+            destinationrole : "User",
         })
         await newNotification.save();
         res.status(201).json({ message: 'Notification created successfully', notification:newNotification })
@@ -119,5 +120,18 @@ exports.searchNotifications = async (req,res) => {
         res.status(200).json(notifications);
     } catch (err) {
         res.status(500).json({ message: 'Error searching Notification', error: err.message });
+    }
+}
+
+// get admin send notifications for vendor
+exports.getAdminSendNotifications = async(req,res) => {
+    try {
+        const notifications = await Notification.find({ destinationrole: "Vendor" });
+        if(notifications.length === 0 ){
+            return res.status(404).json({ message: "no admin notifications" });
+        }
+        res.status(200).json(notifications)
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching Notification', error: error.message });
     }
 }
