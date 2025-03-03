@@ -22,4 +22,7 @@ router.delete('/delete/:id',verifyToken(['Vendor']),notificationController.delet
 // search notifications
 router.get('/search',verifyToken(['Vendor']),notificationController.searchNotifications);
 
+// get admin send notifications for vendor
+router.get('/get-admin-notifications',verifyToken(['Vendor']),notificationController.getAdminSendNotifications);
+
 module.exports = router;
