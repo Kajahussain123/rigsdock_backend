@@ -18,6 +18,8 @@ exports.createCarousel = async (req, res) => {
       image: req.file.filename,
       title,
       link,
+      ownerrole: req.user.role,
+      ownerId: req.user.id
     });
 
     await newCarousel.save();
