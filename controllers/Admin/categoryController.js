@@ -29,7 +29,10 @@ exports.createCategory = async (req, res) => {
 exports.getCategories = async (req, res) => {
     try {
         const categories = await Category.find().populate('maincategory');
-        res.status(200).json(categories);
+        res.status(200).json({
+            total: categories.length,
+            categories
+        });
     } catch (err) {
         res.status(500).json({ message: 'Error fetching categories', error: err.message });
     }
