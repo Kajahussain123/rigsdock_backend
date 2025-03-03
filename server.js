@@ -36,6 +36,7 @@ const vendorSubcategory = require('./routes/Vendor/SubCategory/SubCategoryRoutes
 const vendorProfile = require('./routes/Vendor/Profile/ProfileRoutes');
 const vendorNotification = require('./routes/Vendor/Notification/NotificationRoute');
 const vendorProduct = require('./routes/Vendor/Product/VendorProductRoutes');
+const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
 
 
 // User Routes
@@ -74,6 +75,7 @@ app.use("/vendor/subcategory", vendorSubcategory);
 app.use("/vendor/profile", vendorProfile);
 app.use("/vendor/notification", vendorNotification);
 app.use("/vendor/product", vendorProduct);
+app.use("/vendor/carousel", vendorCarousel);
 
 // User Routes
 app.use("/user/auth", userAuth);
