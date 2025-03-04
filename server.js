@@ -31,6 +31,14 @@ const couponRouter = require('./routes/admin/Coupon/couponRoutes')
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
+const vendorMaincategory = require('./routes/Vendor/MainCategory/MaincategoryRoute');
+const vendorCategory = require('./routes/Vendor/Category/CategoryRoutes');
+const vendorSubcategory = require('./routes/Vendor/SubCategory/SubCategoryRoutes');
+const vendorProfile = require('./routes/Vendor/Profile/ProfileRoutes');
+const vendorNotification = require('./routes/Vendor/Notification/NotificationRoute');
+const vendorProduct = require('./routes/Vendor/Product/VendorProductRoutes');
+const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
+const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
 
 
 // User Routes
@@ -62,7 +70,16 @@ app.use('/admin/coupon', couponRouter);
 
 
 // Vendor Routes
-app.use("/vendor/auth", vendorAuth);  
+app.use("/vendor/auth", vendorAuth);
+app.use("/vendor/maincategory", vendorMaincategory);
+app.use("/vendor/category", vendorCategory);
+app.use("/vendor/subcategory", vendorSubcategory);
+app.use("/vendor/profile", vendorProfile);
+app.use("/vendor/notification", vendorNotification);
+app.use("/vendor/product", vendorProduct);
+app.use("/vendor/carousel", vendorCarousel);
+app.use("/vendor/offer", vendorOffer);
+
 
 // User Routes
 app.use("/user/auth", userAuth);

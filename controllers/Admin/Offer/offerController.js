@@ -48,7 +48,9 @@ exports.createOffer = async (req, res) => {
       targetType,
       target, // When targetType is "Product", this can be an array or a single ID.
       validFrom,
-      validTo
+      validTo,
+      ownerType: req.user.role,
+      ownerId: req.user.id
     });
     await newOffer.save();
 

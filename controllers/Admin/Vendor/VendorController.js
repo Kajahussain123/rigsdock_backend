@@ -198,7 +198,7 @@ exports.searchVendors = async (req, res) => {
 // get all pending requests
 exports.getPendingVendors = async (req,res) => {
     try {
-        const pendingVendors = await Vendor.find({ status: "pending" });
+        const pendingVendors = await Vendor.find({ status: "pending" }).select('-password');
         if (pendingVendors.length === 0) {
             return res.status(404).json({ message: "No Pending Vendors" });
         }
@@ -225,5 +225,58 @@ exports.handleVendorReq = async (req,res) => {
         res.status(200).json({ message: `Vendor request ${status} successfully`, vendor });
     } catch (error) {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+}
+
+// get all pending vendor profile update requests
+exports.getUpdateProfilePendingVendors = async (req,res) => {
+    try {
+        const pendingVendors = await Vendor.find({ updateProfile: "pending" }).select('-password');
+        if (pendingVendors.length === 0) {
+            return res.status(404).json({ message: "No Pending Vendors" });
+        }
+        res.status(200).json({ message: "Pending vendors fetched successfully", vendors: pendingVendors });
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
+    }
+}
+
+// handle vendor update req
+exports.handleVendorUpdateReq = async(req,res) => {
+    try {
+        const { status } = req.body;
+        const {vendorId} = req.params;
+
+        const vendor = await Vendor.findById(vendorId);
+
+        if (!["approved", "rejected"].includes(status)) {
+            return res.status(400).json({ message: "Invalid status. Must be 'approved' or 'rejected'." });
+        }
+
+        if (!vendor) {
+            return res.status(404).json({ message: "Vendor not found" });
+        }
+        if(vendor.updateProfile !== "pending"){
+            return res.status(400).json({ message: "No pending update request for this vendor" });
+        }
+        if(status === "approved"){
+            // Apply the pending updates to the vendor's profile
+            for(const[key,value] of vendor.pendingUpdates) {
+                vendor[key] = value;
+            }
+
+            // Clear the pendingUpdates field and set updateProfile to approved
+            vendor.pendingUpdates = new Map();  // Clear the Map
+            vendor.updateProfile = "approved";
+        }
+        if(status === "rejected"){
+            vendor.pendingUpdates = new Map();  // Clear the Map
+            vendor.updateProfile = "rejected"
+        }
+        await vendor.save();
+        res.status(200).json({ message: "Update approved and applied", vendor });
+    } catch (error) {
+        console.error("Error handling vendor update request:", error);
+        res.status(500).json({ message: "Internal server error." });
     }
 }

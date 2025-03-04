@@ -3,7 +3,7 @@ const fs = require('fs')
 
 //create new notification
 exports.createNotification = async (req,res) => {
-    const { title,description } = req.body;
+    const { title,description,destinationrole } = req.body;
 
     if(!req.file){
         return res.status(400).json({ message: "Notification Image is required" })
@@ -15,7 +15,8 @@ exports.createNotification = async (req,res) => {
             image: req.file.filename,
             description,
             ownerId: req.user.id,
-            role: req.user.role
+            role: req.user.role,
+            destinationrole
         })
         await newNotification.save();
         res.status(201).json({ message: 'Notification created successfully', notification:newNotification })

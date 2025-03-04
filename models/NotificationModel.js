@@ -21,6 +21,11 @@ const notificationSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    destinationrole: {
+        type: String,
+        enum: ["User","Vendor"],
+        required: true
+    }
 },{ timestamps: true });
 
 const Notification = mongoose.model('Notification',notificationSchema);
