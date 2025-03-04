@@ -27,6 +27,7 @@ const NotificationRouter = require("./routes/admin/Notification/notificationRout
 const carouselRouter = require("./routes/admin/Carousel/carouselRoute");
 const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 const OfferRouter = require('./routes/admin/Offer/offerRoutes');
+const couponRouter = require('./routes/admin/Coupon/couponRoutes')
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
@@ -57,11 +58,11 @@ app.use("/admin/notification", NotificationRouter);
 app.use("/admin/carousel", carouselRouter);
 app.use("/admin/vendor", adminVendorRoute);
 app.use('/admin/offer', OfferRouter)
- 
+app.use('/admin/coupon', couponRouter);
 
 
 // Vendor Routes
-app.use("/vendor/auth", vendorAuth);
+app.use("/vendor/auth", vendorAuth);  
 
 // User Routes
 app.use("/user/auth", userAuth);
