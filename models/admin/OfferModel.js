@@ -15,6 +15,8 @@ const offerSchema = new mongoose.Schema({
   },
   validFrom: { type: Date },
   validTo: { type: Date },
+  ownerType: { type: String, required: true },
+  ownerId: { type: mongoose.Schema.Types.ObjectId, refPath: "ownerType" },
   status: { type: String, enum: ['active', 'inactive'], default: 'active' }
 }, { timestamps: true });
 
