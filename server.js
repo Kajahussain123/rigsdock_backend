@@ -39,6 +39,7 @@ const vendorNotification = require('./routes/Vendor/Notification/NotificationRou
 const vendorProduct = require('./routes/Vendor/Product/VendorProductRoutes');
 const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
 const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
+const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
 
 
 // User Routes
@@ -79,6 +80,7 @@ app.use("/vendor/notification", vendorNotification);
 app.use("/vendor/product", vendorProduct);
 app.use("/vendor/carousel", vendorCarousel);
 app.use("/vendor/offer", vendorOffer);
+app.use("/vendor/coupon", vendorCoupon);
 
 
 // User Routes
