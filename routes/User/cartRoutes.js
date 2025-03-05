@@ -8,6 +8,12 @@ router.post("/add", cartController.addToCart);
 // Get user's cart
 router.get("/:userId", cartController.getCart);
 
+// Apply coupon
+router.post("/apply-coupon", cartController.applyCoupon);
+
+// Remove coupon
+router.post("/remove-coupon", cartController.removeCoupon);
+
 // Remove product from cart
 router.post("/remove", cartController.removeFromCart);
 
