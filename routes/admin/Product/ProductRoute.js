@@ -24,4 +24,7 @@ router.delete("/delete/:id",verifyToken(['Admin']),productController.deleteProdu
 // Delete a specific image by name
 router.delete("/delete/:id/image",verifyToken(['Admin']),productController.deleteProductImage);
 
+// Delete a specific attribute field in a product
+router.delete("/:productId/attributes-delete",verifyToken(['Admin']),productController.deleteAttribute);
+
 module.exports = router;
