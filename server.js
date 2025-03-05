@@ -12,8 +12,6 @@ const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
 
 
-
-
 // Token Refresh Route
 const tokenRefresh = require("./routes/token/refreshToken");
 
@@ -52,6 +50,8 @@ const wishlistRoutes = require("./routes/User/wishlistRoutes");
 const cartRoutes = require("./routes/User/cartRoutes");
 const addressRoutes = require("./routes/User/addressRoutes");
 const checkoutRoutes = require("./routes/User/checkoutRoutes");
+const orderRoutes= require('./routes/User/OrderRoutes')
+const userReviewsRoutes = require('./routes/User/ReviewsRoutes')
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -93,6 +93,8 @@ app.use("/user/wishlist", wishlistRoutes);
 app.use("/user/cart", cartRoutes);
 app.use("/user/address", addressRoutes);
 app.use("/user/checkout", checkoutRoutes);
+app.use("/user/order",orderRoutes)
+app.use("/user/reviews",userReviewsRoutes)
 
 
 // Serve uploaded files

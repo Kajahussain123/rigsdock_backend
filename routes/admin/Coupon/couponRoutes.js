@@ -4,7 +4,7 @@ const couponController = require("../../../controllers/Admin/Coupon/couponContro
 const verifyToken = require("../../../middleware/jwt");
 
 // Create coupon (Admin only)
-router.post("/create", verifyToken(["Admin"]), couponController.createCoupon);
+router.post("/create",  couponController.createCoupon);
 
 // Get all coupons
 router.get("/get", couponController.getCoupons);
