@@ -108,6 +108,8 @@ exports.createCoupon = async (req, res) => {
       validTo,
       usageLimit: usageLimit || 0,
       minPurchaseAmount: minPurchaseAmount || 0,
+      ownerType: req.user.role,
+      ownerId: req.user.id,
       firstPurchaseOnly: firstPurchaseOnly || false
     });
     await newCoupon.save();
