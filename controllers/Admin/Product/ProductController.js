@@ -227,3 +227,25 @@ exports.deleteProductImage = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// delete product specific attributes
+exports.deleteAttribute = async (req,res) => {
+  try {
+    const { attribute } = req.body;
+    const { productId } = req.params;
+    const product = await Product.findById(productId);
+    if(!product){
+      return res.status(404).json({ message: "Product not found" });
+    }
+    if(product.attributes.has(attribute)) {
+      product.attributes.delete(attribute);
+      await product.save();
+      return res.status(200).json({ message: `Attribute '${attribute}' deleted successfully`, product });
+    } else {
+      return res.status(404).json({ message: `Attribute '${attribute}' not found` });
+    }
+  } catch (error) {
+    console.error("Error deleting attribute:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+}
