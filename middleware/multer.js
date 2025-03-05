@@ -22,7 +22,9 @@ const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     "image/jpeg", "image/png", "image/jpg",
     "application/pdf", "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // Added XLSX
+    "application/vnd.ms-excel" // Added XLS
   ];
 
   if (allowedMimeTypes.includes(file.mimetype)) {

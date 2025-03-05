@@ -4,7 +4,11 @@ const productController = require('../../../controllers/Admin/Product/ProductCon
 const multerConfig = require('../../../middleware/multer');
 const verifyToken = require('../../../middleware/jwt');
 
-const upload = multerConfig.array("images", 5);
+// const upload = multerConfig.array("images", 5);
+const upload = multerConfig.fields([
+    { name: "images", maxCount: 5 },
+    { name: "file", maxCount: 1 },
+])
 
 // create new product
 router.post("/create",verifyToken(['Admin']),upload,productController.createProduct);
@@ -26,5 +30,8 @@ router.delete("/delete/:id/image",verifyToken(['Admin']),productController.delet
 
 // Delete a specific attribute field in a product
 router.delete("/:productId/attributes-delete",verifyToken(['Admin']),productController.deleteAttribute);
+
+// Bulk product upload
+router.post("/bulk-upload",verifyToken(['Admin']),upload,productController.productBulkUpload)
 
 module.exports = router;
