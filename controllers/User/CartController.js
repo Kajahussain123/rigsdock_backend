@@ -109,8 +109,9 @@ exports.applyCoupon = async (req, res) => {
     try {
         const { userId, couponCode } = req.body;
 
-        // Find the cart for the user
-        let cart = await Cart.findOne({ user: userId });
+        // Find the user's cart
+        let cart = await Cart.findOne({ user: userId }).populate("items.product");
+
         if (!cart || cart.items.length === 0) {
             return res.status(400).json({ message: "Cart is empty" });
         }
@@ -121,7 +122,7 @@ exports.applyCoupon = async (req, res) => {
             return res.status(400).json({ message: "Invalid coupon code" });
         }
 
-        // Check if coupon is still valid
+        // Check if the coupon is still valid
         const currentDate = new Date();
         if (currentDate < new Date(coupon.validFrom) || currentDate > new Date(coupon.validTo)) {
             return res.status(400).json({ message: "Coupon is not valid at this time" });
@@ -135,45 +136,50 @@ exports.applyCoupon = async (req, res) => {
             }
         }
 
-        // Check minimum purchase amount
+        // Validate minimum purchase amount
         if (cart.totalPrice < coupon.minPurchaseAmount) {
             return res.status(400).json({ message: `Minimum purchase amount required: ${coupon.minPurchaseAmount}` });
         }
 
-        // Validate if the coupon applies to the cart items
+        let discountAmount = 0;
         let isValidCoupon = false;
-        for (const item of cart.items) {
-            if (coupon.targetType === "Product" && item.product.toString() === coupon.target.toString()) {
-                isValidCoupon = true;
-                break;
-            } else if (coupon.targetType === "Category") {
-                const product = await Product.findById(item.product);
-                if (product && product.category.toString() === coupon.target.toString()) {
+
+        // Apply coupon based on its ownerType and targetType
+        if (coupon.ownerType === "Vendor") {
+            // Vendor coupons apply only to products they own
+            cart.items.forEach((item) => {
+                if (
+                    coupon.targetType === "Product" &&
+                    item.product._id.toString() === coupon.target.toString() &&
+                    item.product.owner.toString() === coupon.ownerId.toString()
+                ) {
                     isValidCoupon = true;
-                    break;
+                    const discount = coupon.discountType === "percentage"
+                        ? (item.price * coupon.discountValue) / 100
+                        : coupon.discountValue;
+                    discountAmount += Math.min(discount, item.price * item.quantity);
                 }
-            } else if (coupon.targetType === "SubCategory") {
-                const product = await Product.findById(item.product);
-                if (product && product.subcategory.toString() === coupon.target.toString()) {
+            });
+
+        } else if (coupon.ownerType === "Admin") {
+            // Admin coupons apply to products, categories, or subcategories
+            cart.items.forEach((item) => {
+                if (
+                    (coupon.targetType === "Product" && item.product._id.toString() === coupon.target.toString()) ||
+                    (coupon.targetType === "Category" && item.product.category.toString() === coupon.target.toString()) ||
+                    (coupon.targetType === "SubCategory" && item.product.subcategory.toString() === coupon.target.toString())
+                ) {
                     isValidCoupon = true;
-                    break;
+                    const discount = coupon.discountType === "percentage"
+                        ? (item.price * coupon.discountValue) / 100
+                        : coupon.discountValue;
+                    discountAmount += Math.min(discount, item.price * item.quantity);
                 }
-            } else if (coupon.targetType === "Brand" && item.brand.toLowerCase() === coupon.target.toLowerCase()) {
-                isValidCoupon = true;
-                break;
-            }
+            });
         }
 
         if (!isValidCoupon) {
             return res.status(400).json({ message: "Coupon does not apply to any items in your cart" });
-        }
-
-        // Calculate discount
-        let discountAmount = 0;
-        if (coupon.discountType === "percentage") {
-            discountAmount = (cart.totalPrice * coupon.discountValue) / 100;
-        } else if (coupon.discountType === "fixed") {
-            discountAmount = coupon.discountValue;
         }
 
         // Ensure discount does not exceed total price
@@ -181,7 +187,7 @@ exports.applyCoupon = async (req, res) => {
         cart.totalPrice -= discountAmount;
 
         // Store applied coupon details
-        cart.coupon = { code: couponCode, discountAmount };
+        cart.coupon = { code: couponCode, discountAmount, ownerType: coupon.ownerType, ownerId: coupon.ownerId };
         await cart.save();
 
         res.status(200).json({
@@ -190,10 +196,12 @@ exports.applyCoupon = async (req, res) => {
             newTotalPrice: cart.totalPrice,
             cart,
         });
+
     } catch (error) {
         res.status(500).json({ message: "Error applying coupon", error: error.message });
     }
 };
+
 
 // remove coupon 
 exports.removeCoupon = async (req, res) => {
