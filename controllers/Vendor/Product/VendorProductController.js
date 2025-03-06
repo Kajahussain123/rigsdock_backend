@@ -1,7 +1,7 @@
 const Product = require('../../../models/admin/ProductModel');
 const path = require('path');
 const fs = require('fs');
-const xlsx = require("xlsx");
+// const xlsx = require("xlsx");
 
 //create a new product
 exports.createProduct = async (req, res) => {
@@ -251,51 +251,51 @@ exports.deleteAttribute = async (req,res) => {
   }
 }
 
-// Bulk upload endpoint
-exports.productBulkUpload = async(req,res) => {
-  try {
-    const file = req.file || req.files.file;
-    if (!file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-    // Read the Excel file
-    const workbook = xlsx.readFile(file[0].path);
-    const sheetName = workbook.SheetNames[0]; // Get the first sheet
-    const sheet = workbook.Sheets[sheetName];
-    const data = xlsx.utils.sheet_to_json(sheet); // Convert sheet to JSON
+// // Bulk upload endpoint
+// exports.productBulkUpload = async(req,res) => {
+//   try {
+//     const file = req.file || req.files.file;
+//     if (!file) {
+//       return res.status(400).json({ message: "No file uploaded" });
+//     }
+//     // Read the Excel file
+//     const workbook = xlsx.readFile(file[0].path);
+//     const sheetName = workbook.SheetNames[0]; // Get the first sheet
+//     const sheet = workbook.Sheets[sheetName];
+//     const data = xlsx.utils.sheet_to_json(sheet); // Convert sheet to JSON
 
-    // Validate and process each row
-    const products = [];
-    for (const row of data) {
-      // Validate required fields
-      if (!row.name || !row.description || !row.price || !row.stock || !row.brand || !row.maincategory || !row.category || !row.subcategory) {
-        return res.status(400).json({ message: "Missing required fields in the Excel sheet" });
-      }
+//     // Validate and process each row
+//     const products = [];
+//     for (const row of data) {
+//       // Validate required fields
+//       if (!row.name || !row.description || !row.price || !row.stock || !row.brand || !row.maincategory || !row.category || !row.subcategory) {
+//         return res.status(400).json({ message: "Missing required fields in the Excel sheet" });
+//       }
 
-      // Create a new product
-      const product = new Product({
-        name: row.name,
-        description: row.description,
-        price: row.price,
-        finalPrice: row.finalPrice || row.price, // Use finalPrice if provided, else default to price
-        stock: row.stock,
-        brand: row.brand,
-        maincategory: row.maincategory,
-        category: row.category,
-        subcategory: row.subcategory,
-        attributes: row.attributes ? JSON.parse(row.attributes) : {}, // Parse attributes if provided
-        ownerType: req.user.role,
-        owner: req.user.id,
-        images: row.images ? row.images.split(",") : [], // Split images string into an array
-        offer: row.offer || null // Use offer if provided
-      });
+//       // Create a new product
+//       const product = new Product({
+//         name: row.name,
+//         description: row.description,
+//         price: row.price,
+//         finalPrice: row.finalPrice || row.price, // Use finalPrice if provided, else default to price
+//         stock: row.stock,
+//         brand: row.brand,
+//         maincategory: row.maincategory,
+//         category: row.category,
+//         subcategory: row.subcategory,
+//         attributes: row.attributes ? JSON.parse(row.attributes) : {}, // Parse attributes if provided
+//         ownerType: req.user.role,
+//         owner: req.user.id,
+//         images: row.images ? row.images.split(",") : [], // Split images string into an array
+//         offer: row.offer || null // Use offer if provided
+//       });
 
-      products.push(product);
-    }
-    await Product.insertMany(products);
-    res.status(201).json({ message: "Products uploaded successfully", count: products.length });
-  } catch (error) {
-    console.error("Error during bulk upload:", error);
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
-  }
-}
+//       products.push(product);
+//     }
+//     await Product.insertMany(products);
+//     res.status(201).json({ message: "Products uploaded successfully", count: products.length });
+//   } catch (error) {
+//     console.error("Error during bulk upload:", error);
+//     res.status(500).json({ message: "Internal Server Error", error: error.message });
+//   }
+// }

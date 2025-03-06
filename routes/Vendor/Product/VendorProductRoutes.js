@@ -31,7 +31,7 @@ router.delete("/delete/:id/image",verifyToken(['Vendor']),productController.dele
 // Delete a specific attribute field in a product
 router.delete("/:productId/attributes-delete",verifyToken(['Vendor']),productController.deleteAttribute);
 
-// Bulk product upload
-router.post("/bulk-upload",verifyToken(['Vendor']),upload,productController.productBulkUpload)
+// // Bulk product upload
+// router.post("/bulk-upload",verifyToken(['Vendor']),upload,productController.productBulkUpload)
 
 module.exports = router;
