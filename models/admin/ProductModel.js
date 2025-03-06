@@ -15,7 +15,7 @@ const productSchema = new mongoose.Schema(
     brand: { type: String, required: true },
     maincategory: { type: mongoose.Schema.Types.ObjectId, ref: "MainCategory", required: true },
     category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
-    subcategory: { type: mongoose.Schema.Types.ObjectId, ref: "SubCategory", required: true },
+    subcategory: { type: mongoose.Schema.Types.ObjectId, ref: "SubCategory" },
     attributes: { type: Map, of: mongoose.Schema.Types.Mixed },
     ownerType: { type: String, required: true },
     owner: { type: mongoose.Schema.Types.ObjectId, refPath: "ownerType", required: true },
