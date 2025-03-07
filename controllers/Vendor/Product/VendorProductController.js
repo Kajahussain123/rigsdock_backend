@@ -5,13 +5,13 @@ const fs = require('fs');
 
 //create a new product
 exports.createProduct = async (req, res) => {
-  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory } = req.body;
+  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory,deliveryfee } = req.body;
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "At least one product image is required" });
     }
 
-    const imagePaths = req.files.map((file) => file.filename);
+    const imagePaths = req.files.images.map((file) => file.filename);
 
     if (!name || !description || !price || !stock || !subcategory || !brand || !category || !maincategory) {
       return res.status(400).json({ message: "All fields are required" });
@@ -24,20 +24,26 @@ exports.createProduct = async (req, res) => {
       return res.status(400).json({ message: "Invalid attributes format" });
     }
 
-    const newProduct = new Product({
+    const productData = {
       name,
       description,
       price,
       stock,
       images: imagePaths,
       brand,
-      subcategory,
       category,
       maincategory,
       ownerType: req.user.role,
       owner: req.user.id,
       attributes: new Map(Object.entries(attributes)),
-    });
+    }
+    if (subcategory && subcategory.trim().length > 0) {
+      productData.subcategory = subcategory;
+    }
+    if(deliveryfee) {
+      productData.deliveryfee = deliveryfee;
+    }
+    const newProduct = new Product(productData);
     await newProduct.save();
     res.status(201).json({
       message: "Product created successfully",
