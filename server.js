@@ -27,6 +27,8 @@ const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 const OfferRouter = require('./routes/admin/Offer/offerRoutes');
 const couponRouter = require('./routes/admin/Coupon/couponRoutes');
 const adminOrder = require('./routes/admin/Order/orderRoutes');
+const adminInvoice = require('./routes/admin/Invoice/invoiceRoutes');
+const adminUser = require('./routes/admin/User/UserRoutes');
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
@@ -71,6 +73,8 @@ app.use("/admin/vendor", adminVendorRoute);
 app.use('/admin/offer', OfferRouter)
 app.use('/admin/coupon', couponRouter);
 app.use('/admin/order', adminOrder);
+app.use('/admin/invoice', adminInvoice);
+app.use('/admin/user', adminUser);
 
 
 // Vendor Routes
