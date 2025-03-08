@@ -10,6 +10,7 @@ app.use(express.json());
 const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
+const DealOfTheDay = require("./models/Vendor/DealofthedayModel");
 
 
 // Token Refresh Route
@@ -41,6 +42,7 @@ const vendorProduct = require('./routes/Vendor/Product/VendorProductRoutes');
 const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
 const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
 const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
+const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRoutes');
 
 
 // User Routes
@@ -88,6 +90,7 @@ app.use("/vendor/product", vendorProduct);
 app.use("/vendor/carousel", vendorCarousel);
 app.use("/vendor/offer", vendorOffer);
 app.use("/vendor/coupon", vendorCoupon);
+app.use("/vendor/dealoftheday", vendorDealOfTheDay);
 
 
 // User Routes
@@ -141,6 +144,32 @@ cron.schedule("0 0 * * *", async () => {
       console.log(`Reverted offer ${offer._id} as it is expired or inactive`);
     }
   });
+
+// New cron job for "Deal of the Day" concept
+cron.schedule("0 * * * *", async () => {
+  try {
+    const currentTime = new Date();
+
+    // Find expired deals
+    const expiredDeals = await DealOfTheDay.find({ expiresAt: { $lte: currentTime } });
+
+    // Revert the finalPrice for each expired deal
+    for (const deal of expiredDeals) {
+      const product = await Product.findById(deal.product);
+      if (product) {
+        product.finalPrice = product.price; // Revert to original price
+        await product.save();
+      }
+    }
+
+    // Delete expired deals
+    await DealOfTheDay.deleteMany({ expiresAt: { $lte: currentTime } });
+
+    console.log("Expired deals cleaned up successfully");
+  } catch (error) {
+    console.error("Error cleaning up expired deals:", error);
+  }
+});
 
 const PORT = process.env.PORT || 3006;
 
