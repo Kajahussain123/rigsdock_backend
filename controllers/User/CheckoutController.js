@@ -11,11 +11,24 @@ exports.getCheckoutDetails = async (req, res) => {
             return res.status(400).json({ message: "Cart is empty" });
         }
 
-        res.status(200).json({ items: cart.items, totalPrice: cart.totalPrice });
+        // Extract coupon details if available
+        const appliedCoupon = cart.coupon
+            ? {
+                code: cart.coupon.code,
+                discountAmount: cart.coupon.discountAmount,
+            }
+            : null;
+
+        res.status(200).json({
+            items: cart.items,
+            totalPrice: cart.totalPrice, // Original total price before discount
+            appliedCoupon, // Coupon details if available
+        });
     } catch (error) {
         res.status(500).json({ message: "Error fetching checkout details", error: error.message });
     }
 };
+
 
 // Proceed to checkout (POST method)
 exports.proceedToCheckout = async (req, res) => {
