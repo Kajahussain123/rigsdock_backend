@@ -3,19 +3,19 @@ const router = express.Router();
 const offerController = require("../../../controllers/Admin/Offer/offerController");
 const verifyToken = require("../../../middleware/jwt");
 
-// Create offer (only admin)
+// Create Offer (Admin only)
 router.post("/create", verifyToken(["Admin"]), offerController.createOffer);
 
-// Get all offers
+// Get all Offers
 router.get("/get", offerController.getOffers);
 
-// Get offer by ID
+// Get Offer by ID
 router.get("/get/:id", offerController.getOfferById);
 
-// Update offer (only admin)
+// Update Offer (Admin only)
 router.patch("/update/:id", verifyToken(["Admin"]), offerController.updateOffer);
 
-// Delete offer (only admin)
+// Delete Offer (Admin only)
 router.delete("/delete/:id", verifyToken(["Admin"]), offerController.deleteOffer);
 
 module.exports = router;

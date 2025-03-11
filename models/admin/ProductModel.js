@@ -2,11 +2,10 @@ const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema(
   {
-
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     price: { type: Number, required: true, min: 0 },
-    // finalPrice stores the discounted price; by default, it equals price.
+    // finalPrice stores the effective price (updated by deal or offer)
     finalPrice: {
       type: Number,
       default: function () { return this.price; }
@@ -27,8 +26,9 @@ const productSchema = new mongoose.Schema(
         message: "Maximum 5 images allowed",
       },
     },
-    // Store the offer applied (only one offer at a time)
-    offer: { type: mongoose.Schema.Types.ObjectId, ref: "Offer", default: null }
+    // Only one immediate discount is applied: either an offer or a deal.
+    offer: { type: mongoose.Schema.Types.ObjectId, ref: "Offer", default: null },
+    deal: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", default: null }
   },
   { timestamps: true }
 );

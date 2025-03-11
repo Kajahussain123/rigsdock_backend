@@ -1,10 +1,9 @@
-const Coupon = require("../../../models/admin/couponModel");
+const Coupon = require("../../../models/admin/CouponModel");
 const Product = require("../../../models/admin/ProductModel");
 const Category = require("../../../models/admin/categoryModel");
 const SubCategory = require("../../../models/admin/SubCategoryModel");
 
-
-
+// Helper: Validate coupon (can also accept purchaseAmount and firstPurchase flag)
 const isCouponValid = (coupon, purchaseAmount = null, isFirstPurchase = true) => {
   const now = new Date();
   if (coupon.status !== "active") return false;
@@ -13,6 +12,7 @@ const isCouponValid = (coupon, purchaseAmount = null, isFirstPurchase = true) =>
   if (purchaseAmount !== null && coupon.minPurchaseAmount && Number(purchaseAmount) < Number(coupon.minPurchaseAmount)) {
     return false;
   }
+
   // Check if the coupon is only valid on the first purchase
   if (coupon.firstPurchaseOnly && !isFirstPurchase) {
     return false;
@@ -22,6 +22,7 @@ const isCouponValid = (coupon, purchaseAmount = null, isFirstPurchase = true) =>
 
 
 // Create a new coupon with validations and rule checks
+
 exports.createCoupon = async (req, res) => {
   const {
     name,
@@ -37,26 +38,13 @@ exports.createCoupon = async (req, res) => {
     firstPurchaseOnly
   } = req.body;
 
-  // Check required fields
-  const missingFields = [];
-  if (!name) missingFields.push("name");
-  if (!couponCode) missingFields.push("couponCode");
-  if (!discountType) missingFields.push("discountType");
-  if (!discountValue) missingFields.push("discountValue");
-  if (!targetType) missingFields.push("targetType");
-  if (!target) missingFields.push("target");
-  if (!validFrom) missingFields.push("validFrom");
-  if (!validTo) missingFields.push("validTo");
-
-  if (missingFields.length > 0) {
-    return res.status(400).json({
-      message: "Missing required fields",
-      missingFields
-    });
+  
+  if (!name || !couponCode || !discountType || !discountValue || !targetType || !target || !validFrom || !validTo) {
+    return res.status(400).json({ message: "Missing required fields" });
   }
+  
+  // Validate discount values.
 
-
-  // Validate discount values
   if (discountType === "percentage") {
     if (discountValue <= 0 || discountValue > 100) {
       return res.status(400).json({ message: "For percentage discount, discountValue must be between 1 and 100" });
@@ -69,12 +57,13 @@ exports.createCoupon = async (req, res) => {
     return res.status(400).json({ message: "Invalid discount type" });
   }
 
-  // Validate minPurchaseAmount (if provided)
+  
   if (minPurchaseAmount !== undefined && (isNaN(minPurchaseAmount) || Number(minPurchaseAmount) < 0)) {
     return res.status(400).json({ message: "minPurchaseAmount must be a non-negative number" });
   }
+  
+  // Validate that the target exists.
 
-  // Validate that the target exists based on targetType
   try {
     if (targetType === "Product") {
       const product = await Product.findById(target);
@@ -108,8 +97,10 @@ exports.createCoupon = async (req, res) => {
       validTo,
       usageLimit: usageLimit || 0,
       minPurchaseAmount: minPurchaseAmount || 0,
+
       ownerType: req.user.role,
       ownerId: req.user.id,
+
       firstPurchaseOnly: firstPurchaseOnly || false
     });
     await newCoupon.save();
@@ -119,7 +110,9 @@ exports.createCoupon = async (req, res) => {
   }
 };
 
+
 // Get all coupons
+
 exports.getCoupons = async (req, res) => {
   try {
     const coupons = await Coupon.find().sort({ createdAt: -1 });
@@ -129,7 +122,9 @@ exports.getCoupons = async (req, res) => {
   }
 };
 
+
 // Get a coupon by ID
+
 exports.getCouponById = async (req, res) => {
   try {
     const coupon = await Coupon.findById(req.params.id);
@@ -140,7 +135,9 @@ exports.getCouponById = async (req, res) => {
   }
 };
 
+
 // Update a coupon with validations
+
 exports.updateCoupon = async (req, res) => {
   const { id } = req.params;
   const {
@@ -155,15 +152,17 @@ exports.updateCoupon = async (req, res) => {
     status,
     usageLimit,
     minPurchaseAmount,
-    firstPurchaseOnly // New field for first purchase condition
-  } = req.body;
 
+    firstPurchaseOnly
+  } = req.body;
+  
   try {
     const coupon = await Coupon.findById(id);
     if (!coupon) return res.status(404).json({ message: "Coupon not found" });
-
+    
     if (name) coupon.name = name;
     if (couponCode) coupon.couponCode = couponCode;
+    
 
     if (discountType) {
       if (!["percentage", "fixed"].includes(discountType)) {
@@ -194,14 +193,17 @@ exports.updateCoupon = async (req, res) => {
       }
       coupon.minPurchaseAmount = minPurchaseAmount;
     }
+
     // New: Update firstPurchaseOnly if provided
     if (req.body.firstPurchaseOnly !== undefined) {
       // Optionally, validate it's a boolean
+
       if (typeof req.body.firstPurchaseOnly !== "boolean") {
         return res.status(400).json({ message: "firstPurchaseOnly must be a boolean" });
       }
       coupon.firstPurchaseOnly = req.body.firstPurchaseOnly;
     }
+
 
     // Validate target if targetType or target changed
     if (coupon.targetType === "Product") {
@@ -219,6 +221,7 @@ exports.updateCoupon = async (req, res) => {
       }
     }
 
+
     await coupon.save();
     res.status(200).json({ message: "Coupon updated successfully", coupon });
   } catch (error) {
@@ -228,6 +231,7 @@ exports.updateCoupon = async (req, res) => {
 
 
 // Delete a coupon
+
 exports.deleteCoupon = async (req, res) => {
   try {
     const coupon = await Coupon.findByIdAndDelete(req.params.id);
