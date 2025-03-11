@@ -47,6 +47,7 @@ const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
 const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
 const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRoutes');
 const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
+const vendorOrder = require('./routes/Vendor/Order/VendorOrderRoutes');
 
 
 // User Routes
@@ -100,6 +101,7 @@ app.use("/vendor/offer", vendorOffer);
 app.use("/vendor/coupon", vendorCoupon);
 app.use("/vendor/dealoftheday", vendorDealOfTheDay);
 app.use("/vendor/dashboard", vendorDashboard);
+app.use("/vendor/order", vendorOrder);
 
 
 // User Routes
