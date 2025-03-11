@@ -58,6 +58,7 @@ const checkoutRoutes = require("./routes/User/checkoutRoutes");
 const orderRoutes= require('./routes/User/OrderRoutes')
 const userReviewsRoutes = require('./routes/User/ReviewsRoutes')
 const complaintsRoutes = require('./routes/User/ComplaintRoutes')
+const dealofthedayUserRoutes= require('./routes/User/dealOfTheDayRoutes')
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -106,6 +107,7 @@ app.use("/user/checkout", checkoutRoutes);
 app.use("/user/order",orderRoutes)
 app.use("/user/reviews",userReviewsRoutes)
 app.use("/user/complaint",complaintsRoutes)
+app.use("/user/dealoftheday",dealofthedayUserRoutes)
 
 
 // Serve uploaded files
