@@ -5,9 +5,13 @@ const path = require('path');
 //create new vendor
 exports.createVendor = async(req,res) => {
     try {
-        const existingVendor = await Vendor.findOne({ email: req.body.email });
-        if (existingVendor) {
-            return res.status(409).json({ message: 'Vendor already exists' });
+        const existingVendorMail = await Vendor.findOne({ email: req.body.email });
+        if (existingVendorMail) {
+            return res.status(409).json({ message: 'Vendor email already exists' });
+        }
+        const existingVendorPhone = await Vendor.findOne({ number: req.body.number });
+        if (existingVendorPhone) {
+            return res.status(409).json({ message: 'Vendor phone number already exists' });
         }
         const images = req.files.images;
         const storeLogo = req.files.storelogo ? req.files.storelogo[0] : null;

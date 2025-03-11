@@ -10,8 +10,7 @@ app.use(express.json());
 const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
-
-
+const DealOfTheDay = require("./models/Vendor/DealofthedayModel");
 
 
 // Token Refresh Route
@@ -29,6 +28,11 @@ const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 const OfferRouter = require('./routes/admin/Offer/offerRoutes');
 const couponRouter = require('./routes/admin/Coupon/couponRoutes')
 const DealRouter = require('./routes/admin/Deal/dealRoutes')
+const adminOrder = require('./routes/admin/Order/orderRoutes');
+const adminInvoice = require('./routes/admin/Invoice/invoiceRoutes');
+const adminUser = require('./routes/admin/User/UserRoutes');
+const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
+
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
@@ -40,6 +44,9 @@ const vendorNotification = require('./routes/Vendor/Notification/NotificationRou
 const vendorProduct = require('./routes/Vendor/Product/VendorProductRoutes');
 const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
 const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
+const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
+const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRoutes');
+const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
 
 
 // User Routes
@@ -52,6 +59,10 @@ const wishlistRoutes = require("./routes/User/wishlistRoutes");
 const cartRoutes = require("./routes/User/cartRoutes");
 const addressRoutes = require("./routes/User/addressRoutes");
 const checkoutRoutes = require("./routes/User/checkoutRoutes");
+const orderRoutes= require('./routes/User/OrderRoutes')
+const userReviewsRoutes = require('./routes/User/ReviewsRoutes')
+const complaintsRoutes = require('./routes/User/ComplaintRoutes')
+const dealofthedayUserRoutes= require('./routes/User/dealOfTheDayRoutes')
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -69,6 +80,11 @@ app.use("/admin/vendor", adminVendorRoute);
 app.use('/admin/offer', OfferRouter)
 app.use('/admin/coupon', couponRouter);
 app.use('/admin/deal', DealRouter);
+app.use('/admin/order', adminOrder);
+app.use('/admin/invoice', adminInvoice);
+app.use('/admin/user', adminUser);
+app.use('/admin/dashboard', adminDashboard);
+
 
 
 // Vendor Routes
@@ -81,6 +97,9 @@ app.use("/vendor/notification", vendorNotification);
 app.use("/vendor/product", vendorProduct);
 app.use("/vendor/carousel", vendorCarousel);
 app.use("/vendor/offer", vendorOffer);
+app.use("/vendor/coupon", vendorCoupon);
+app.use("/vendor/dealoftheday", vendorDealOfTheDay);
+app.use("/vendor/dashboard", vendorDashboard);
 
 
 // User Routes
@@ -93,6 +112,10 @@ app.use("/user/wishlist", wishlistRoutes);
 app.use("/user/cart", cartRoutes);
 app.use("/user/address", addressRoutes);
 app.use("/user/checkout", checkoutRoutes);
+app.use("/user/order",orderRoutes)
+app.use("/user/reviews",userReviewsRoutes)
+app.use("/user/complaint",complaintsRoutes)
+app.use("/user/dealoftheday",dealofthedayUserRoutes)
 
 
 // Serve uploaded files
@@ -131,6 +154,35 @@ cron.schedule("0 0 * * *", async () => {
       console.log(`Reverted offer ${offer._id} as it is expired or inactive`);
     }
   });
+
+// New cron job for "Deal of the Day" concept
+cron.schedule("0 * * * *", async () => {
+  try {
+    const currentTime = new Date();
+
+    // Find expired deals
+    const expiredDeals = await DealOfTheDay.find({ expiresAt: { $lte: currentTime } });
+
+    // Revert the finalPrice for each expired deal
+    for (const deal of expiredDeals) {
+      const product = await Product.findById(deal.product);
+      if (product) {
+        product.finalPrice = product.price; // Revert to original price
+        await product.save();
+      }
+      // Update the deal status to "inactive"
+      deal.status = "inactive";
+      await deal.save();
+    }
+
+    // // Delete expired deals
+    // await DealOfTheDay.deleteMany({ expiresAt: { $lte: currentTime } });
+
+    console.log("Expired deals cleaned up successfully");
+  } catch (error) {
+    console.error("Error cleaning up expired deals:", error);
+  }
+});
 
 const PORT = process.env.PORT || 3006;
 

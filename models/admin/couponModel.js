@@ -13,6 +13,8 @@ const couponSchema = new mongoose.Schema(
     status: { type: String, enum: ["active", "inactive"], default: "active" },
     usageLimit: { type: Number, default: 0 },
     minPurchaseAmount: { type: Number, default: 0 },
+    ownerType: { type: String, required: true },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, refPath: "ownerType" },
     // New field: only applicable if it's the customer's first purchase.
     firstPurchaseOnly: { type: Boolean, default: false }
   },

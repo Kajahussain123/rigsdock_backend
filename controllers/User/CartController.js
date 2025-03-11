@@ -1,5 +1,7 @@
 const Cart = require("../../models/User/CartModel");
 const Product = require("../../models/admin/ProductModel");
+const Coupon = require('../../models/admin/couponModel')
+const Order = require('../../models/User/OrderModel')
 
 // Add product to cart
 exports.addToCart = async (req, res) => {
@@ -52,11 +54,12 @@ exports.getCart = async (req, res) => {
             return res.status(404).json({ message: "Cart not found" });
         }
 
-        res.status(200).json(cart);
+        res.status(200).json({ cart, appliedCoupon: cart.coupon || null });
     } catch (error) {
         res.status(500).json({ message: "Error fetching cart", error: error.message });
     }
 };
+
 
 // Remove product from cart
 exports.removeFromCart = async (req, res) => {
@@ -99,3 +102,126 @@ exports.clearCart = async (req, res) => {
         res.status(500).json({ message: "Error clearing cart", error: error.message });
     }
 };
+
+
+//apply coupon 
+exports.applyCoupon = async (req, res) => {
+    try {
+        const { userId, couponCode } = req.body;
+
+        // Find the user's cart
+        let cart = await Cart.findOne({ user: userId }).populate("items.product");
+
+        if (!cart || cart.items.length === 0) {
+            return res.status(400).json({ message: "Cart is empty" });
+        }
+
+        // Find the coupon
+        const coupon = await Coupon.findOne({ couponCode });
+        if (!coupon) {
+            return res.status(400).json({ message: "Invalid coupon code" });
+        }
+
+        // Check if the coupon is still valid
+        const currentDate = new Date();
+        if (currentDate < new Date(coupon.validFrom) || currentDate > new Date(coupon.validTo)) {
+            return res.status(400).json({ message: "Coupon is not valid at this time" });
+        }
+
+        // Check first purchase requirement
+        if (coupon.firstPurchaseOnly) {
+            const existingOrder = await Order.findOne({ user: userId });
+            if (existingOrder) {
+                return res.status(400).json({ message: "This coupon is only valid for first-time purchases" });
+            }
+        }
+
+        // Validate minimum purchase amount
+        if (cart.totalPrice < coupon.minPurchaseAmount) {
+            return res.status(400).json({ message: `Minimum purchase amount required: ${coupon.minPurchaseAmount}` });
+        }
+
+        let discountAmount = 0;
+        let isValidCoupon = false;
+
+        // Apply coupon based on its ownerType and targetType
+        if (coupon.ownerType === "Vendor") {
+            // Vendor coupons apply only to products they own
+            cart.items.forEach((item) => {
+                if (
+                    coupon.targetType === "Product" &&
+                    item.product._id.toString() === coupon.target.toString() &&
+                    item.product.owner.toString() === coupon.ownerId.toString()
+                ) {
+                    isValidCoupon = true;
+                    const discount = coupon.discountType === "percentage"
+                        ? (item.price * coupon.discountValue) / 100
+                        : coupon.discountValue;
+                    discountAmount += Math.min(discount, item.price * item.quantity);
+                }
+            });
+
+        } else if (coupon.ownerType === "Admin") {
+            // Admin coupons apply to products, categories, or subcategories
+            cart.items.forEach((item) => {
+                if (
+                    (coupon.targetType === "Product" && item.product._id.toString() === coupon.target.toString()) ||
+                    (coupon.targetType === "Category" && item.product.category.toString() === coupon.target.toString()) ||
+                    (coupon.targetType === "SubCategory" && item.product.subcategory.toString() === coupon.target.toString())
+                ) {
+                    isValidCoupon = true;
+                    const discount = coupon.discountType === "percentage"
+                        ? (item.price * coupon.discountValue) / 100
+                        : coupon.discountValue;
+                    discountAmount += Math.min(discount, item.price * item.quantity);
+                }
+            });
+        }
+
+        if (!isValidCoupon) {
+            return res.status(400).json({ message: "Coupon does not apply to any items in your cart" });
+        }
+
+        // Ensure discount does not exceed total price
+        discountAmount = Math.min(discountAmount, cart.totalPrice);
+        cart.totalPrice -= discountAmount;
+
+        // Store applied coupon details
+        cart.coupon = { code: couponCode, discountAmount, ownerType: coupon.ownerType, ownerId: coupon.ownerId };
+        await cart.save();
+
+        res.status(200).json({
+            message: "Coupon applied successfully",
+            discountAmount,
+            newTotalPrice: cart.totalPrice,
+            cart,
+        });
+
+    } catch (error) {
+        res.status(500).json({ message: "Error applying coupon", error: error.message });
+    }
+};
+
+
+// remove coupon 
+exports.removeCoupon = async (req, res) => {
+    try {
+        const { userId } = req.body;
+
+        // Find cart for the user
+        let cart = await Cart.findOne({ user: userId });
+        if (!cart || !cart.coupon) {
+            return res.status(400).json({ message: "No coupon applied to this cart" });
+        }
+
+        // Remove discount and coupon
+        cart.totalPrice += cart.coupon.discountAmount;
+        cart.coupon = null;
+
+        await cart.save();
+        res.status(200).json({ message: "Coupon removed successfully", cart });
+    } catch (error) {
+        res.status(500).json({ message: "Error removing coupon", error: error.message });
+    }
+};
+

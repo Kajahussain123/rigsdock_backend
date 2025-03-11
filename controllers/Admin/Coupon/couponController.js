@@ -12,11 +12,17 @@ const isCouponValid = (coupon, purchaseAmount = null, isFirstPurchase = true) =>
   if (purchaseAmount !== null && coupon.minPurchaseAmount && Number(purchaseAmount) < Number(coupon.minPurchaseAmount)) {
     return false;
   }
-  if (coupon.firstPurchaseOnly && !isFirstPurchase) return false;
+
+  // Check if the coupon is only valid on the first purchase
+  if (coupon.firstPurchaseOnly && !isFirstPurchase) {
+    return false;
+  }
   return true;
 };
 
-// Create a new coupon.
+
+// Create a new coupon with validations and rule checks
+
 exports.createCoupon = async (req, res) => {
   const {
     name,
@@ -31,12 +37,14 @@ exports.createCoupon = async (req, res) => {
     minPurchaseAmount,
     firstPurchaseOnly
   } = req.body;
+
   
   if (!name || !couponCode || !discountType || !discountValue || !targetType || !target || !validFrom || !validTo) {
     return res.status(400).json({ message: "Missing required fields" });
   }
   
   // Validate discount values.
+
   if (discountType === "percentage") {
     if (discountValue <= 0 || discountValue > 100) {
       return res.status(400).json({ message: "For percentage discount, discountValue must be between 1 and 100" });
@@ -48,12 +56,14 @@ exports.createCoupon = async (req, res) => {
   } else {
     return res.status(400).json({ message: "Invalid discount type" });
   }
+
   
   if (minPurchaseAmount !== undefined && (isNaN(minPurchaseAmount) || Number(minPurchaseAmount) < 0)) {
     return res.status(400).json({ message: "minPurchaseAmount must be a non-negative number" });
   }
   
   // Validate that the target exists.
+
   try {
     if (targetType === "Product") {
       const product = await Product.findById(target);
@@ -74,7 +84,7 @@ exports.createCoupon = async (req, res) => {
   } catch (err) {
     return res.status(500).json({ message: "Error validating target", error: err.message });
   }
-  
+
   try {
     const newCoupon = new Coupon({
       name,
@@ -87,6 +97,10 @@ exports.createCoupon = async (req, res) => {
       validTo,
       usageLimit: usageLimit || 0,
       minPurchaseAmount: minPurchaseAmount || 0,
+
+      ownerType: req.user.role,
+      ownerId: req.user.id,
+
       firstPurchaseOnly: firstPurchaseOnly || false
     });
     await newCoupon.save();
@@ -96,7 +110,9 @@ exports.createCoupon = async (req, res) => {
   }
 };
 
-// Get all coupons.
+
+// Get all coupons
+
 exports.getCoupons = async (req, res) => {
   try {
     const coupons = await Coupon.find().sort({ createdAt: -1 });
@@ -106,7 +122,9 @@ exports.getCoupons = async (req, res) => {
   }
 };
 
-// Get a coupon by ID.
+
+// Get a coupon by ID
+
 exports.getCouponById = async (req, res) => {
   try {
     const coupon = await Coupon.findById(req.params.id);
@@ -117,7 +135,9 @@ exports.getCouponById = async (req, res) => {
   }
 };
 
-// Update a coupon.
+
+// Update a coupon with validations
+
 exports.updateCoupon = async (req, res) => {
   const { id } = req.params;
   const {
@@ -132,6 +152,7 @@ exports.updateCoupon = async (req, res) => {
     status,
     usageLimit,
     minPurchaseAmount,
+
     firstPurchaseOnly
   } = req.body;
   
@@ -142,13 +163,14 @@ exports.updateCoupon = async (req, res) => {
     if (name) coupon.name = name;
     if (couponCode) coupon.couponCode = couponCode;
     
+
     if (discountType) {
       if (!["percentage", "fixed"].includes(discountType)) {
         return res.status(400).json({ message: "Invalid discount type" });
       }
       coupon.discountType = discountType;
     }
-    
+
     if (discountValue) {
       if (coupon.discountType === "percentage" && (discountValue <= 0 || discountValue > 100)) {
         return res.status(400).json({ message: "For percentage discount, discountValue must be between 1 and 100" });
@@ -158,7 +180,7 @@ exports.updateCoupon = async (req, res) => {
       }
       coupon.discountValue = discountValue;
     }
-    
+
     if (targetType) coupon.targetType = targetType;
     if (target) coupon.target = target;
     if (validFrom) coupon.validFrom = validFrom;
@@ -171,13 +193,35 @@ exports.updateCoupon = async (req, res) => {
       }
       coupon.minPurchaseAmount = minPurchaseAmount;
     }
+
+    // New: Update firstPurchaseOnly if provided
     if (req.body.firstPurchaseOnly !== undefined) {
+      // Optionally, validate it's a boolean
+
       if (typeof req.body.firstPurchaseOnly !== "boolean") {
         return res.status(400).json({ message: "firstPurchaseOnly must be a boolean" });
       }
       coupon.firstPurchaseOnly = req.body.firstPurchaseOnly;
     }
-    
+
+
+    // Validate target if targetType or target changed
+    if (coupon.targetType === "Product") {
+      const product = await Product.findById(coupon.target);
+      if (!product) return res.status(400).json({ message: "Target product not found" });
+    } else if (coupon.targetType === "Category") {
+      const category = await Category.findById(coupon.target);
+      if (!category) return res.status(400).json({ message: "Target category not found" });
+    } else if (coupon.targetType === "SubCategory") {
+      const subcategory = await SubCategory.findById(coupon.target);
+      if (!subcategory) return res.status(400).json({ message: "Target subcategory not found" });
+    } else if (coupon.targetType === "Brand") {
+      if (typeof coupon.target !== "string" || !coupon.target.trim()) {
+        return res.status(400).json({ message: "Invalid target brand" });
+      }
+    }
+
+
     await coupon.save();
     res.status(200).json({ message: "Coupon updated successfully", coupon });
   } catch (error) {
@@ -185,7 +229,9 @@ exports.updateCoupon = async (req, res) => {
   }
 };
 
-// Delete a coupon.
+
+// Delete a coupon
+
 exports.deleteCoupon = async (req, res) => {
   try {
     const coupon = await Coupon.findByIdAndDelete(req.params.id);
