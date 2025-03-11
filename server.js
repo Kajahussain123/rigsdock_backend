@@ -28,6 +28,7 @@ const carouselRouter = require("./routes/admin/Carousel/carouselRoute");
 const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 const OfferRouter = require('./routes/admin/Offer/offerRoutes');
 const couponRouter = require('./routes/admin/Coupon/couponRoutes')
+const DealRouter = require('./routes/admin/Deal/dealRoutes')
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
@@ -67,6 +68,7 @@ app.use("/admin/carousel", carouselRouter);
 app.use("/admin/vendor", adminVendorRoute);
 app.use('/admin/offer', OfferRouter)
 app.use('/admin/coupon', couponRouter);
+app.use('/admin/deal', DealRouter);
 
 
 // Vendor Routes
@@ -135,3 +137,4 @@ const PORT = process.env.PORT || 3006;
 app.listen(PORT, () => {
     console.log(`Server started listening at PORT ${PORT}`);
 });
+ 

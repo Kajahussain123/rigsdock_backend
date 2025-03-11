@@ -5,14 +5,13 @@ const offerSchema = new mongoose.Schema({
   description: { type: String },
   discountType: { type: String, enum: ['percentage', 'fixed'], required: true },
   discountValue: { type: Number, required: true },
-  // Extend targetType to include SubCategory
+  // Target type for the offer: "Product", "Category", or "SubCategory"
   targetType: { type: String, enum: ['Product', 'Category', 'SubCategory'], required: true },
-  // When targetType is "Product" this can be an array (or single id),
-  // for "Category" or "SubCategory" this is a single ObjectId.
-  target: {
-    type: mongoose.Schema.Types.Mixed, 
-    required: true
-  },
+  // When targetType is "Product", this can be an array (or a single ID);
+  // for "Category" or "SubCategory", a single ObjectId is used.
+  target: { type: mongoose.Schema.Types.Mixed, required: true },
+  // New field: an array of affected product IDs (optional, but useful for population)
+  products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
   validFrom: { type: Date },
   validTo: { type: Date },
   ownerType: { type: String, required: true },

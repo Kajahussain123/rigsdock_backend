@@ -3,20 +3,19 @@ const router = express.Router();
 const couponController = require("../../../controllers/Admin/Coupon/couponController");
 const verifyToken = require("../../../middleware/jwt");
 
-// Create coupon (Admin only)
+// Create Coupon (Admin only)
 router.post("/create", verifyToken(["Admin"]), couponController.createCoupon);
 
-// Get all coupons
+// Get all Coupons
 router.get("/get", couponController.getCoupons);
 
-// Get coupon by ID
+// Get Coupon by ID
 router.get("/get/:id", couponController.getCouponById);
 
-// Update coupon (Admin only)
+// Update Coupon (Admin only)
 router.patch("/update/:id", verifyToken(["Admin"]), couponController.updateCoupon);
 
-// Delete coupon (Admin only)
+// Delete Coupon (Admin only)
 router.delete("/delete/:id", verifyToken(["Admin"]), couponController.deleteCoupon);
 
 module.exports = router;
-  
