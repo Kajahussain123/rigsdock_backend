@@ -20,6 +20,10 @@ const dealOfTheDaySchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         required: true
+    },
+    status: {
+        type: String,
+        enum: ["active","inactive"],
     }
 },{ timestamps: true });
 

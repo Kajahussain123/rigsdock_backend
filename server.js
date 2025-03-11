@@ -166,10 +166,13 @@ cron.schedule("0 * * * *", async () => {
         product.finalPrice = product.price; // Revert to original price
         await product.save();
       }
+      // Update the deal status to "inactive"
+      deal.status = "inactive";
+      await deal.save();
     }
 
-    // Delete expired deals
-    await DealOfTheDay.deleteMany({ expiresAt: { $lte: currentTime } });
+    // // Delete expired deals
+    // await DealOfTheDay.deleteMany({ expiresAt: { $lte: currentTime } });
 
     console.log("Expired deals cleaned up successfully");
   } catch (error) {
