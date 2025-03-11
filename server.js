@@ -30,6 +30,7 @@ const couponRouter = require('./routes/admin/Coupon/couponRoutes');
 const adminOrder = require('./routes/admin/Order/orderRoutes');
 const adminInvoice = require('./routes/admin/Invoice/invoiceRoutes');
 const adminUser = require('./routes/admin/User/UserRoutes');
+const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
@@ -43,6 +44,7 @@ const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
 const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
 const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
 const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRoutes');
+const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
 
 
 // User Routes
@@ -78,6 +80,7 @@ app.use('/admin/coupon', couponRouter);
 app.use('/admin/order', adminOrder);
 app.use('/admin/invoice', adminInvoice);
 app.use('/admin/user', adminUser);
+app.use('/admin/dashboard', adminDashboard);
 
 
 // Vendor Routes
@@ -92,6 +95,7 @@ app.use("/vendor/carousel", vendorCarousel);
 app.use("/vendor/offer", vendorOffer);
 app.use("/vendor/coupon", vendorCoupon);
 app.use("/vendor/dealoftheday", vendorDealOfTheDay);
+app.use("/vendor/dashboard", vendorDashboard);
 
 
 // User Routes
