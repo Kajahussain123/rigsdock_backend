@@ -1,4 +1,4 @@
-const Coupon = require("../../../models/admin/CouponModel");
+const Coupon = require("../../../models/admin/couponModel");
 const Product = require("../../../models/admin/ProductModel");
 const Category = require("../../../models/admin/categoryModel");
 const SubCategory = require("../../../models/admin/SubCategoryModel");
