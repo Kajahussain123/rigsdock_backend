@@ -32,6 +32,7 @@ const adminOrder = require('./routes/admin/Order/orderRoutes');
 const adminInvoice = require('./routes/admin/Invoice/invoiceRoutes');
 const adminUser = require('./routes/admin/User/UserRoutes');
 const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
+const adminFinancial = require('./routes/admin/Financial/FinancialRoutes');
 
 
 // Vendor Routes
@@ -85,6 +86,7 @@ app.use('/admin/order', adminOrder);
 app.use('/admin/invoice', adminInvoice);
 app.use('/admin/user', adminUser);
 app.use('/admin/dashboard', adminDashboard);
+app.use('/admin/financial', adminFinancial);
 
 
 
