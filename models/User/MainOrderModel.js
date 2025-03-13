@@ -1,41 +1,13 @@
 const mongoose = require("mongoose");
 
-const orderSchema = new mongoose.Schema(
+const mainOrderSchema = new mongoose.Schema(
   {
-    mainOrderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "MainOrder", // Reference to Main Order
-      required: true,
-    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    vendor: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Vendor",
-      required: true,
-    },
-    items: [
-      {
-        product: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Product",
-          required: true,
-        },
-        quantity: {
-          type: Number,
-          required: true,
-          min: 1,
-        },
-        price: {
-          type: Number,
-          required: true,
-        },
-      },
-    ],
-    totalPrice: {
+    totalAmount: {
       type: Number,
       required: true,
     },
@@ -59,8 +31,14 @@ const orderSchema = new mongoose.Schema(
       ref: "Address",
       required: true,
     },
+    subOrders: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Order",
+      },
+    ],
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Order", orderSchema);
+module.exports = mongoose.model("MainOrder", mainOrderSchema);

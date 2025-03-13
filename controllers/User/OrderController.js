@@ -1,14 +1,13 @@
 const Order = require("../../models/User/OrderModel");
 const Cart = require("../../models/User/CartModel");
 const Address = require("../../models/User/AddressModel");
-const Coupon = require("../../models/admin/couponModel");
-
+const MainOrder = require("../../models/User/MainOrderModel");
 // Place an order (POST method)
 exports.placeOrder = async (req, res) => {
     try {
         const { userId, shippingAddressId, paymentMethod } = req.body;
 
-        // Fetch user's cart (including applied coupon)
+        // Fetch user's cart with product details
         const cart = await Cart.findOne({ user: userId }).populate("items.product");
 
         if (!cart || cart.items.length === 0) {
@@ -27,32 +26,81 @@ exports.placeOrder = async (req, res) => {
             return res.status(400).json({ message: "Invalid payment method" });
         }
 
-        // Use cart totalPrice directly without subtracting discountAmount again
-        let finalPrice = cart.totalPrice;  
+        // Group items by vendor (using owner field)
+        const vendorOrders = {};
+        let totalAmount = 0;
 
-        // Create order
-        const newOrder = new Order({
-            user: userId,
-            items: cart.items.map(item => ({
+        cart.items.forEach(item => {
+            const vendorId = item.product.owner ? item.product.owner.toString() : null;
+            if (!vendorId) {
+                console.error("Error: Product missing owner field", item.product);
+                return; // Skip products without an owner
+            }
+
+            if (!vendorOrders[vendorId]) {
+                vendorOrders[vendorId] = {
+                    vendor: vendorId,
+                    items: [],
+                    totalPrice: 0,
+                };
+            }
+            vendorOrders[vendorId].items.push({
                 product: item.product._id,
                 quantity: item.quantity,
                 price: item.price,
-            })),
-            totalPrice: finalPrice, // Use cart.totalPrice as final price
-            coupon: cart.coupon ? { code: cart.coupon.code, discountAmount: cart.coupon.discountAmount } : undefined,
-            paymentMethod,
-            paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid", // COD remains Pending, others Paid
-            orderStatus: "Processing",
-            shippingAddress: shippingAddressId,
+            });
+            vendorOrders[vendorId].totalPrice += item.price * item.quantity;
+            totalAmount += item.price * item.quantity;
         });
 
-        await newOrder.save();
+        // Create Main Order
+        const mainOrder = new MainOrder({
+            user: userId,
+            totalAmount,
+            paymentMethod,
+            paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
+            orderStatus: "Processing",
+            shippingAddress: shippingAddressId,
+            subOrders: [], // Will be updated later
+        });
 
-        // Clear cart after order placement
+        await mainOrder.save();
+
+        // Create vendor orders and link to main order
+        const createdOrders = [];
+        for (const vendorId in vendorOrders) {
+            const orderData = vendorOrders[vendorId];
+
+            const newOrder = new Order({
+                mainOrderId: mainOrder._id, // Link to Main Order
+                user: userId,
+                vendor: vendorId,
+                items: orderData.items,
+                totalPrice: orderData.totalPrice,
+                paymentMethod,
+                paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
+                orderStatus: "Processing",
+                shippingAddress: shippingAddressId,
+            });
+
+            await newOrder.save();
+            createdOrders.push(newOrder._id);
+        }
+
+        // Update Main Order with subOrders
+        mainOrder.subOrders = createdOrders;
+        await mainOrder.save();
+
+        // Clear the cart after placing the order
         await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
 
-        res.status(201).json({ message: "Order placed successfully", order: newOrder });
+        res.status(201).json({
+            message: "Orders placed successfully",
+            mainOrderId: mainOrder._id,
+            orders: createdOrders,
+        });
     } catch (error) {
+        console.error("Error placing order:", error);
         res.status(500).json({ message: "Error placing order", error: error.message });
     }
 };
