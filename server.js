@@ -11,6 +11,7 @@ const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
 const DealOfTheDay = require("./models/Vendor/DealofthedayModel");
+const { calculateVendorSales } = require('./controllers/Admin/VendorPayout/VendorPayoutController');
 
 
 // Token Refresh Route
@@ -33,6 +34,7 @@ const adminInvoice = require('./routes/admin/Invoice/invoiceRoutes');
 const adminUser = require('./routes/admin/User/UserRoutes');
 const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
 const adminFinancial = require('./routes/admin/Financial/FinancialRoutes');
+const adminVendorpayout = require('./routes/admin/vendorPayout/vendorPayoutRoutes');
 
 
 // Vendor Routes
@@ -87,6 +89,7 @@ app.use('/admin/invoice', adminInvoice);
 app.use('/admin/user', adminUser);
 app.use('/admin/dashboard', adminDashboard);
 app.use('/admin/financial', adminFinancial);
+app.use('/admin/vendorpayout', adminVendorpayout);
 
 
 
@@ -186,6 +189,12 @@ cron.schedule("0 * * * *", async () => {
   } catch (error) {
     console.error("Error cleaning up expired deals:", error);
   }
+});
+
+// Schedule the function to run at midnight every day
+cron.schedule('* * * * *', () => {
+  console.log('Running vendor sales calculation at midnight...');
+  calculateVendorSales();
 });
 
 const PORT = process.env.PORT || 3006;
