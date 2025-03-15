@@ -11,7 +11,6 @@ const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
 const DealOfTheDay = require("./models/Vendor/DealofthedayModel");
-const { calculateVendorSales } = require('./controllers/Admin/VendorPayout/VendorPayoutController');
 
 
 // Token Refresh Route
@@ -35,6 +34,7 @@ const adminUser = require('./routes/admin/User/UserRoutes');
 const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
 const adminFinancial = require('./routes/admin/Financial/FinancialRoutes');
 const adminVendorpayout = require('./routes/admin/vendorPayout/vendorPayoutRoutes');
+const adminAnalytics = require('./routes/admin/Analytics/analyticsRoutes');
 
 
 // Vendor Routes
@@ -51,6 +51,8 @@ const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
 const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRoutes');
 const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
 const vendorOrder = require('./routes/Vendor/Order/VendorOrderRoutes');
+const vendorAnalytics = require('./routes/Vendor/Analytics/analyticsRoutes');
+
 
 
 // User Routes
@@ -90,6 +92,7 @@ app.use('/admin/user', adminUser);
 app.use('/admin/dashboard', adminDashboard);
 app.use('/admin/financial', adminFinancial);
 app.use('/admin/vendorpayout', adminVendorpayout);
+app.use('/admin/analytics', adminAnalytics);
 
 
 
@@ -107,6 +110,7 @@ app.use("/vendor/coupon", vendorCoupon);
 app.use("/vendor/dealoftheday", vendorDealOfTheDay);
 app.use("/vendor/dashboard", vendorDashboard);
 app.use("/vendor/order", vendorOrder);
+app.use("/vendor/analytics", vendorAnalytics);
 
 
 // User Routes
@@ -189,12 +193,6 @@ cron.schedule("0 * * * *", async () => {
   } catch (error) {
     console.error("Error cleaning up expired deals:", error);
   }
-});
-
-// Schedule the function to run at midnight every day
-cron.schedule('* * * * *', () => {
-  console.log('Running vendor sales calculation at midnight...');
-  calculateVendorSales();
 });
 
 const PORT = process.env.PORT || 3006;
