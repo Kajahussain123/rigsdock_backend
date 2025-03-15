@@ -30,12 +30,12 @@ exports.addToCart = async (req, res) => {
             cart.items.push({
                 product: productId,
                 quantity,
-                price: product.price,
+                price: product.finalPrice || product.price, // Use finalPrice if available
             });
         }
 
-        // Update total price
-        cart.totalPrice = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        // Update total price using finalPrice
+        cart.totalPrice = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
         await cart.save();
         res.status(200).json({ message: "Product added to cart", cart });
@@ -43,6 +43,7 @@ exports.addToCart = async (req, res) => {
         res.status(500).json({ message: "Error adding product to cart", error: error.message });
     }
 };
+
 
 // Get user's cart
 exports.getCart = async (req, res) => {

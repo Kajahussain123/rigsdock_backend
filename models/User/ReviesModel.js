@@ -21,7 +21,13 @@ const reviewSchema = new mongoose.Schema(
     review: {
       type: String,
       required: true
-    }
+    },
+    images: [
+      {
+        type: String, // Store image file paths
+        required: true
+      }
+    ]
   },
   { timestamps: true }
 );

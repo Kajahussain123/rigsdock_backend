@@ -1,11 +1,13 @@
 const Review = require("../../models/User/ReviesModel");
 const Product = require("../../models/admin/ProductModel");
 const Order = require("../../models/User/OrderModel");
+const upload = require("../../middleware/multer");
 
 // Add a review
 exports.addReview = async (req, res) => {
     try {
         const { userId, productId, rating, review } = req.body;
+        const images = req.files ? req.files.map(file => file.path) : []; // Get uploaded image paths
 
         // Check if the user has purchased the product & order is delivered
         const order = await Order.findOne({
@@ -13,6 +15,8 @@ exports.addReview = async (req, res) => {
             "items.product": productId,
             orderStatus: "Delivered" // Ensure the order is delivered
         });
+
+        // console.log("Order found:", order);
 
         if (!order) {
             return res.status(400).json({ message: "You can only review products that have been delivered." });
@@ -29,7 +33,8 @@ exports.addReview = async (req, res) => {
             user: userId,
             product: productId,
             rating,
-            review
+            review,
+            images // Save array of image paths
         });
 
         await newReview.save();
@@ -108,5 +113,20 @@ exports.deleteReview = async (req, res) => {
         res.status(200).json({ message: "Review deleted successfully" });
     } catch (error) {
         res.status(500).json({ message: "Error deleting review", error: error.message });
+    }
+};
+
+// Get all reviews for a user
+exports.getUserReviews = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        const reviews = await Review.find({ user: userId })
+            .populate("product", "name price")
+            .sort({ createdAt: -1 });
+
+        res.status(200).json({ reviews });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching user reviews", error: error.message });
     }
 };
