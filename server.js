@@ -85,6 +85,8 @@ const orderRoutes= require('./routes/User/OrderRoutes')
 const userReviewsRoutes = require('./routes/User/ReviewsRoutes')
 const complaintsRoutes = require('./routes/User/ComplaintRoutes')
 const dealofthedayUserRoutes= require('./routes/User/dealOfTheDayRoutes')
+const vendorUserRoutes=require('./routes/User/vendorRoutes')
+const platFormFee = require('./routes/admin/PlatformFee/PlatformFeeRoutes')
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -99,18 +101,18 @@ app.use("/admin/maincategory", MainCategoryRouter);
 app.use("/admin/notification", NotificationRouter);
 app.use("/admin/carousel", carouselRouter);
 app.use("/admin/vendor", adminVendorRoute);
-app.use('/admin/offer', OfferRouter)
+app.use('/admin/offer', OfferRouter);
 app.use('/admin/coupon', couponRouter);
 app.use('/admin/deal', DealRouter);
 app.use('/admin/order', adminOrder);
 app.use('/admin/invoice', adminInvoice);
 app.use('/admin/user', adminUser);
+app.use('/admin/platform', platFormFee);  // ✅ Added from 'kaja' branch
 app.use('/admin/dashboard', adminDashboard);
 app.use('/admin/financial', adminFinancial);
 app.use('/admin/vendorpayout', adminVendorpayout);
 app.use('/admin/analytics', adminAnalytics);
 app.use('/admin/review', adminReviews);
-app.use('/admin/chat', adminChat);
 
 
 
@@ -148,6 +150,7 @@ app.use("/user/order",orderRoutes)
 app.use("/user/reviews",userReviewsRoutes)
 app.use("/user/complaint",complaintsRoutes)
 app.use("/user/dealoftheday",dealofthedayUserRoutes)
+app.use("/user/vendor",vendorUserRoutes)
 
 
 // Serve uploaded files

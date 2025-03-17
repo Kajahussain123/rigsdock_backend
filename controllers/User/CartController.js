@@ -2,6 +2,7 @@ const Cart = require("../../models/User/CartModel");
 const Product = require("../../models/admin/ProductModel");
 const Coupon = require('../../models/admin/couponModel')
 const Order = require('../../models/User/OrderModel')
+const PlatformFee = require("../../models/admin/PlatformFeeModel"); 
 
 // Add product to cart
 exports.addToCart = async (req, res) => {
@@ -14,11 +15,10 @@ exports.addToCart = async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
-        // Find cart for the user
+        // Find or create a cart
         let cart = await Cart.findOne({ user: userId });
-
         if (!cart) {
-            cart = new Cart({ user: userId, items: [], totalPrice: 0 });
+            cart = new Cart({ user: userId, items: [], totalPrice: 0, platformFee: 0 });
         }
 
         // Check if product already exists in cart
@@ -34,8 +34,20 @@ exports.addToCart = async (req, res) => {
             });
         }
 
-        // Update total price using finalPrice
-        cart.totalPrice = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        // Recalculate total price
+        cart.totalPrice = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+        // Fetch platform fee config
+        const feeConfig = await PlatformFee.findOne();
+        let platformFee = 0;
+        if (feeConfig) {
+            platformFee = feeConfig.feeType === "fixed" 
+                ? feeConfig.amount 
+                : (feeConfig.amount / 100) * cart.totalPrice;
+        }
+
+        cart.platformFee = platformFee;
+        cart.totalPrice += platformFee;
 
         await cart.save();
         res.status(200).json({ message: "Product added to cart", cart });
@@ -55,11 +67,32 @@ exports.getCart = async (req, res) => {
             return res.status(404).json({ message: "Cart not found" });
         }
 
-        res.status(200).json({ cart, appliedCoupon: cart.coupon || null });
+        // Fetch platform fee from database if not stored in cart
+        if (!cart.platformFee || cart.platformFee === 0) {
+            const feeConfig = await PlatformFee.findOne();
+            let platformFee = 0;
+
+            if (feeConfig) {
+                platformFee = feeConfig.feeType === "fixed" 
+                    ? feeConfig.amount 
+                    : (feeConfig.amount / 100) * cart.totalPrice;
+            }
+
+            cart.platformFee = platformFee;
+            await cart.save(); // Save the updated cart with platform fee
+        }
+
+        res.status(200).json({
+            cart,
+            platformFee: cart.platformFee,  // Ensure the correct platform fee is returned
+            totalPrice: cart.totalPrice,
+            appliedCoupon: cart.coupon || null
+        });
     } catch (error) {
         res.status(500).json({ message: "Error fetching cart", error: error.message });
     }
 };
+
 
 
 // Remove product from cart
