@@ -1,15 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const complaintController = require("../../controllers/User/ComplaintController");
-const multerConfig = require('../../middleware/multer');
+const upload = require('../../middleware/multer')
 
-const upload = multerConfig.fields([
-    { name: "images", maxCount: 5 },
-    { name: "file", maxCount: 1 },
-])
+
 
 // Register a complaint (User can upload images)
-router.post("/register", upload, complaintController.registerComplaint);
+router.post("/register", upload.array("images", 5), complaintController.registerComplaint);
 
 // Get all complaints for a user
 router.get("/user/:userId", complaintController.getUserComplaints);

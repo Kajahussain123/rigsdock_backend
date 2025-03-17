@@ -22,11 +22,13 @@ const reviewSchema = new mongoose.Schema(
       type: String,
       required: true
     },
-    response: { // New field for vendor response
+    response: {
+      // New field for vendor response
       type: String,
       default: ""
     },
-    report: { // New field for reporting unfair reviews
+    report: {
+      // New field for reporting unfair reviews
       reportedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Vendor"
@@ -37,7 +39,13 @@ const reviewSchema = new mongoose.Schema(
         enum: ["Pending", "Resolved"],
         default: "Pending"
       }
-    }
+    },
+    images: [
+      {
+        type: String, // Store image file paths
+        required: true
+      }
+    ]
   },
   { timestamps: true }
 );

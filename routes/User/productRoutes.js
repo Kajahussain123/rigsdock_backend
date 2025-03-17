@@ -7,6 +7,8 @@ router.get("/get", productController.getProducts);
 
 router.get("/get/:id",productController.getProductById);
 
+router.get("/get/similar/:id",productController.getSimilarProducts);
+
 router.get("/get/:mainCategoryId/:categoryId/:subCategoryId", productController.getProductsByCategoryHierarchy);
 
 module.exports = router;
