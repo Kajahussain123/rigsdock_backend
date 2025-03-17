@@ -6,11 +6,22 @@ const path = require("path");
 const app = express();
 app.use(cors());
 app.use(express.json());
+const socketIo = require('socket.io');
+const http = require('http');
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*", // Adjust this as needed
+    methods: ["GET", "POST"],
+  },
+});
 
 const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
 const DealOfTheDay = require("./models/Vendor/DealofthedayModel");
+const socketHandler = require('./utils/socketHandler');
 
 
 // Token Refresh Route
@@ -36,6 +47,7 @@ const adminFinancial = require('./routes/admin/Financial/FinancialRoutes');
 const adminVendorpayout = require('./routes/admin/vendorPayout/vendorPayoutRoutes');
 const adminAnalytics = require('./routes/admin/Analytics/analyticsRoutes');
 const adminReviews = require('./routes/admin/Review/ReviewRoute');
+const adminChat = require('./routes/admin/Chat/chatRoute');
 
 
 // Vendor Routes
@@ -55,6 +67,7 @@ const vendorOrder = require('./routes/Vendor/Order/VendorOrderRoutes');
 const vendorAnalytics = require('./routes/Vendor/Analytics/analyticsRoutes');
 const vendorReview = require('./routes/Vendor/Review/reviewRoutes');
 const vendorInsights = require('./routes/Vendor/Insights/insightsRoute');
+const vendorChat = require('./routes/Vendor/Chat/vendorChatRoute');
 
 
 
@@ -97,6 +110,7 @@ app.use('/admin/financial', adminFinancial);
 app.use('/admin/vendorpayout', adminVendorpayout);
 app.use('/admin/analytics', adminAnalytics);
 app.use('/admin/review', adminReviews);
+app.use('/admin/chat', adminChat);
 
 
 
@@ -117,6 +131,7 @@ app.use("/vendor/order", vendorOrder);
 app.use("/vendor/analytics", vendorAnalytics);
 app.use("/vendor/review", vendorReview);
 app.use("/vendor/insights", vendorInsights);
+app.use("/vendor/chat", vendorChat);
 
 
 // User Routes
@@ -201,9 +216,11 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
+socketHandler(io);
+
 const PORT = process.env.PORT || 3006;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server started listening at PORT ${PORT}`);
 });
  
