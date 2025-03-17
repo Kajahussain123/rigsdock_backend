@@ -35,6 +35,7 @@ const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
 const adminFinancial = require('./routes/admin/Financial/FinancialRoutes');
 const adminVendorpayout = require('./routes/admin/vendorPayout/vendorPayoutRoutes');
 const adminAnalytics = require('./routes/admin/Analytics/analyticsRoutes');
+const adminReviews = require('./routes/admin/Review/ReviewRoute');
 
 
 // Vendor Routes
@@ -52,6 +53,7 @@ const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRou
 const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
 const vendorOrder = require('./routes/Vendor/Order/VendorOrderRoutes');
 const vendorAnalytics = require('./routes/Vendor/Analytics/analyticsRoutes');
+const vendorReview = require('./routes/Vendor/Review/reviewRoutes');
 
 
 
@@ -93,6 +95,7 @@ app.use('/admin/dashboard', adminDashboard);
 app.use('/admin/financial', adminFinancial);
 app.use('/admin/vendorpayout', adminVendorpayout);
 app.use('/admin/analytics', adminAnalytics);
+app.use('/admin/review', adminReviews);
 
 
 
@@ -111,6 +114,7 @@ app.use("/vendor/dealoftheday", vendorDealOfTheDay);
 app.use("/vendor/dashboard", vendorDashboard);
 app.use("/vendor/order", vendorOrder);
 app.use("/vendor/analytics", vendorAnalytics);
+app.use("/vendor/review", vendorReview);
 
 
 // User Routes

@@ -22,6 +22,24 @@ const reviewSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    response: {
+      // New field for vendor response
+      type: String,
+      default: ""
+    },
+    report: {
+      // New field for reporting unfair reviews
+      reportedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Vendor"
+      },
+      reason: String,
+      status: {
+        type: String,
+        enum: ["Pending", "Resolved"],
+        default: "Pending"
+      }
+    },
     images: [
       {
         type: String, // Store image file paths
