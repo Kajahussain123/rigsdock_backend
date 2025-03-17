@@ -9,6 +9,6 @@ router.post('/create',verifyToken(['Vendor']),dealOfTheDayController.addDealOfTh
 //  update deal of the day price
 router.delete('/delete/:dealId',verifyToken(['Vendor']),dealOfTheDayController.deleteDealOfTheDay);
 
-// router.get('/get',verifyToken(['Vendor']),dealOfTheDayController.getAllDeals);
+router.get('/get',verifyToken(['Vendor']),dealOfTheDayController.getAllDeals);
 
 module.exports = router;

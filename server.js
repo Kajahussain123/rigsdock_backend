@@ -6,11 +6,22 @@ const path = require("path");
 const app = express();
 app.use(cors());
 app.use(express.json());
+const socketIo = require('socket.io');
+const http = require('http');
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*", // Adjust this as needed
+    methods: ["GET", "POST"],
+  },
+});
 
 const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
 const Product = require("./models/admin/ProductModel")
 const DealOfTheDay = require("./models/Vendor/DealofthedayModel");
+const socketHandler = require('./utils/socketHandler');
 
 
 // Token Refresh Route
@@ -26,10 +37,18 @@ const NotificationRouter = require("./routes/admin/Notification/notificationRout
 const carouselRouter = require("./routes/admin/Carousel/carouselRoute");
 const adminVendorRoute = require("./routes/admin/Vendor/VendorRoute");
 const OfferRouter = require('./routes/admin/Offer/offerRoutes');
-const couponRouter = require('./routes/admin/Coupon/couponRoutes');
+const couponRouter = require('./routes/admin/Coupon/couponRoutes')
+const DealRouter = require('./routes/admin/Deal/dealRoutes')
 const adminOrder = require('./routes/admin/Order/orderRoutes');
 const adminInvoice = require('./routes/admin/Invoice/invoiceRoutes');
 const adminUser = require('./routes/admin/User/UserRoutes');
+const adminDashboard = require('./routes/admin/Dashboard/DashboardRoute');
+const adminFinancial = require('./routes/admin/Financial/FinancialRoutes');
+const adminVendorpayout = require('./routes/admin/vendorPayout/vendorPayoutRoutes');
+const adminAnalytics = require('./routes/admin/Analytics/analyticsRoutes');
+const adminReviews = require('./routes/admin/Review/ReviewRoute');
+const adminChat = require('./routes/admin/Chat/chatRoute');
+
 
 // Vendor Routes
 const vendorAuth = require("./routes/Vendor/Auth/AuthRoute");
@@ -43,6 +62,13 @@ const vendorCarousel = require('./routes/Vendor/Carousel/CarouselRoutes');
 const vendorOffer = require('./routes/Vendor/Offer/offerRoutes');
 const vendorCoupon = require('./routes/Vendor/Coupon/CouponRoutes');
 const vendorDealOfTheDay = require('./routes/Vendor/DealOfTheDay/DealOfTheDayRoutes');
+const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
+const vendorOrder = require('./routes/Vendor/Order/VendorOrderRoutes');
+const vendorAnalytics = require('./routes/Vendor/Analytics/analyticsRoutes');
+const vendorReview = require('./routes/Vendor/Review/reviewRoutes');
+const vendorInsights = require('./routes/Vendor/Insights/insightsRoute');
+const vendorChat = require('./routes/Vendor/Chat/vendorChatRoute');
+
 
 
 // User Routes
@@ -75,12 +101,19 @@ app.use("/admin/maincategory", MainCategoryRouter);
 app.use("/admin/notification", NotificationRouter);
 app.use("/admin/carousel", carouselRouter);
 app.use("/admin/vendor", adminVendorRoute);
-app.use('/admin/offer', OfferRouter)
+app.use('/admin/offer', OfferRouter);
 app.use('/admin/coupon', couponRouter);
+app.use('/admin/deal', DealRouter);
 app.use('/admin/order', adminOrder);
 app.use('/admin/invoice', adminInvoice);
 app.use('/admin/user', adminUser);
-app.use('/admin/platform', platFormFee);
+app.use('/admin/platform', platFormFee);  // ✅ Added from 'kaja' branch
+app.use('/admin/dashboard', adminDashboard);
+app.use('/admin/financial', adminFinancial);
+app.use('/admin/vendorpayout', adminVendorpayout);
+app.use('/admin/analytics', adminAnalytics);
+app.use('/admin/review', adminReviews);
+
 
 
 // Vendor Routes
@@ -95,6 +128,12 @@ app.use("/vendor/carousel", vendorCarousel);
 app.use("/vendor/offer", vendorOffer);
 app.use("/vendor/coupon", vendorCoupon);
 app.use("/vendor/dealoftheday", vendorDealOfTheDay);
+app.use("/vendor/dashboard", vendorDashboard);
+app.use("/vendor/order", vendorOrder);
+app.use("/vendor/analytics", vendorAnalytics);
+app.use("/vendor/review", vendorReview);
+app.use("/vendor/insights", vendorInsights);
+app.use("/vendor/chat", vendorChat);
 
 
 // User Routes
@@ -166,10 +205,13 @@ cron.schedule("0 * * * *", async () => {
         product.finalPrice = product.price; // Revert to original price
         await product.save();
       }
+      // Update the deal status to "inactive"
+      deal.status = "inactive";
+      await deal.save();
     }
 
-    // Delete expired deals
-    await DealOfTheDay.deleteMany({ expiresAt: { $lte: currentTime } });
+    // // Delete expired deals
+    // await DealOfTheDay.deleteMany({ expiresAt: { $lte: currentTime } });
 
     console.log("Expired deals cleaned up successfully");
   } catch (error) {
@@ -177,8 +219,11 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
+socketHandler(io);
+
 const PORT = process.env.PORT || 3006;
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server started listening at PORT ${PORT}`);
 });
+ 

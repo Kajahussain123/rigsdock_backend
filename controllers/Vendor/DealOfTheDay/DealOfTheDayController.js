@@ -2,12 +2,12 @@ const DealOfTheDay = require('../../../models/Vendor/DealofthedayModel');
 const Product = require('../../../models/admin/ProductModel');
 
 // create deal of the day
-exports.addDealOfTheDay = async(req,res) => {
+exports.addDealOfTheDay = async(req,res) => { 
     try {
         const { productId,offerPrice } = req.body;
-        const existingVendor = await DealOfTheDay.findOne({ vendor: req.user.id });
+        const existingVendor = await DealOfTheDay.findOne({ vendor: req.user.id, status: "active" });
         if(existingVendor) {
-            return res.status(404).json({ message: "your already have a deal" })
+            return res.status(404).json({ message: "You already have an active deal" })
         }
 
         const product = await Product.findById(productId);
@@ -15,11 +15,11 @@ exports.addDealOfTheDay = async(req,res) => {
             return res.status(404).json({ message: "Product not found" })
         }
 
-        // Check if the product already has a deal
-        const existingDeal = await DealOfTheDay.findOne({ product: productId });
-        if(existingDeal) {
-            return res.status(400).json({ message: "This product already has a deal" })
-        }
+        // // Check if the product already has a deal
+        // const existingDeal = await DealOfTheDay.findOne({ product: productId });
+        // if(existingDeal) {
+        //     return res.status(400).json({ message: "This product already has a deal" })
+        // }
 
         // Update the product's finalPrice
         product.finalPrice = offerPrice;
@@ -31,6 +31,7 @@ exports.addDealOfTheDay = async(req,res) => {
             product: productId,
             offerPrice,
             vendor: req.user.id,
+            status: "active",
             expiresAt,
         });
 
@@ -70,26 +71,26 @@ exports.deleteDealOfTheDay = async (req, res) => {
   }
 };
 
-// // get all deals
-// exports.getAllDeals = async(req,res) => {
-//     try {
-//         const deals = await DealOfTheDay.find();
-//         // Add remaining time to each deal
-//         const dealsWithCountdown = deals.map(deal => {
-//             const currentTime = new Date();
-//             const expiresAt = new Date(deal.expiresAt);
-//             const remainingTime = expiresAt - currentTime; // Time difference in milliseconds
+// get all deals
+exports.getAllDeals = async(req,res) => {
+    try {
+        const deals = await DealOfTheDay.find({ vendor: req.user.id });
+        // // Add remaining time to each deal
+        // const dealsWithCountdown = deals.map(deal => {
+        //     const currentTime = new Date();
+        //     const expiresAt = new Date(deal.expiresAt);
+        //     const remainingTime = expiresAt - currentTime; // Time difference in milliseconds
 
-//             return {
-//                 ...deal.toObject(), // Convert Mongoose document to plain object
-//                 remainingTime: remainingTime > 0 ? remainingTime : 0, // Ensure remaining time is not negative
-//             };
-//         });
-//         res.status(200).json(dealsWithCountdown);
-//     } catch (error) {
-//         res.status(500).json({ message: "Internal Server Error" });
-//     }
-// }
+        //     return {
+        //         ...deal.toObject(), // Convert Mongoose document to plain object
+        //         remainingTime: remainingTime > 0 ? remainingTime : 0, // Ensure remaining time is not negative
+        //     };
+        // });
+        res.status(200).json(deals);
+    } catch (error) {
+        res.status(500).json({ message: "Internal Server Error" });
+    }
+}
 
 // exports.updateDealOfTheDay = async (req, res) => {
 //   try {
