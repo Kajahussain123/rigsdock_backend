@@ -59,6 +59,8 @@ const orderRoutes= require('./routes/User/OrderRoutes')
 const userReviewsRoutes = require('./routes/User/ReviewsRoutes')
 const complaintsRoutes = require('./routes/User/ComplaintRoutes')
 const dealofthedayUserRoutes= require('./routes/User/dealOfTheDayRoutes')
+const vendorUserRoutes=require('./routes/User/vendorRoutes')
+const platFormFee = require('./routes/admin/PlatformFee/PlatformFeeRoutes')
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -78,6 +80,7 @@ app.use('/admin/coupon', couponRouter);
 app.use('/admin/order', adminOrder);
 app.use('/admin/invoice', adminInvoice);
 app.use('/admin/user', adminUser);
+app.use('/admin/platform', platFormFee);
 
 
 // Vendor Routes
@@ -108,6 +111,7 @@ app.use("/user/order",orderRoutes)
 app.use("/user/reviews",userReviewsRoutes)
 app.use("/user/complaint",complaintsRoutes)
 app.use("/user/dealoftheday",dealofthedayUserRoutes)
+app.use("/user/vendor",vendorUserRoutes)
 
 
 // Serve uploaded files
