@@ -54,6 +54,7 @@ const vendorDashboard = require('./routes/Vendor/Dashboard/DashboardRoutes');
 const vendorOrder = require('./routes/Vendor/Order/VendorOrderRoutes');
 const vendorAnalytics = require('./routes/Vendor/Analytics/analyticsRoutes');
 const vendorReview = require('./routes/Vendor/Review/reviewRoutes');
+const vendorInsights = require('./routes/Vendor/Insights/insightsRoute');
 
 
 
@@ -115,6 +116,7 @@ app.use("/vendor/dashboard", vendorDashboard);
 app.use("/vendor/order", vendorOrder);
 app.use("/vendor/analytics", vendorAnalytics);
 app.use("/vendor/review", vendorReview);
+app.use("/vendor/insights", vendorInsights);
 
 
 // User Routes
