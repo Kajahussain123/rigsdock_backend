@@ -14,17 +14,17 @@ exports.zohoCallBack = async(req,res) => {
     const response = await axios.post('https://accounts.zoho.com/oauth/v2/token', null, {
             params: {
                 code: authorizationCode,
-                client_id: '1000.JJ6C0VUUDXGCEIWXCDCLNT89Q12CBW',
-                client_secret: 'af174ae905352501ef89ad254f4a0e1744010bafcf',
+                client_id: '1000.2D0GSSBGVDS0V53RJPLO39ME6YZ2FG',
+                client_secret: '753147cab29243d518c57a95afe031459104c3bb25',
                 redirect_uri: 'https://rigsdock-backend.onrender.com/admin/invoice/zoho-callback',
                 grant_type: 'authorization_code'
             }
         });
-        console.log('response :', response);
+        console.log('Response :', response.data);
 
 
-        const accessToken = response.access_token;
-        const refreshToken = response.refresh_token;
+        const accessToken = response.data.access_token;
+        const refreshToken = response.data.refresh_token;
         console.log('Access Token:', accessToken);
         console.log('Refresh Token:', refreshToken);
 
@@ -32,11 +32,10 @@ exports.zohoCallBack = async(req,res) => {
         const newToken = new Token({ accessToken, refreshToken });
         await newToken.save();
 
-        // Save the tokens securely (e.g., in a database)
         res.status(200).json({ message: 'Authorization successful! Tokens received.', accessToken, refreshToken });
   } catch (error) {
-        console.error('Error exchanging code for tokens:', error.response.data);
-        res.status(500).send('Error during authorization.');
+    console.error('Error exchanging code for tokens:', error.response ? error.response.data : error.message);
+    res.status(500).json({ error: 'Error during authorization.', details: error.response ? error.response.data : error.message });
   }
 }
 
