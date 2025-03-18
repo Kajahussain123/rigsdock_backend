@@ -20,9 +20,11 @@ exports.zohoCallBack = async(req,res) => {
                 grant_type: 'authorization_code'
             }
         });
+        console.log('response :', response);
 
-        const accessToken = response.data.access_token;
-        const refreshToken = response.data.refresh_token;
+
+        const accessToken = response.access_token;
+        const refreshToken = response.refresh_token;
         console.log('Access Token:', accessToken);
         console.log('Refresh Token:', refreshToken);
 
@@ -31,7 +33,7 @@ exports.zohoCallBack = async(req,res) => {
         await newToken.save();
 
         // Save the tokens securely (e.g., in a database)
-        res.status(200).json({ message: 'Authorization successful! Tokens received.', access_token, refresh_token });
+        res.status(200).json({ message: 'Authorization successful! Tokens received.', accessToken, refreshToken });
   } catch (error) {
         console.error('Error exchanging code for tokens:', error.response.data);
         res.status(500).send('Error during authorization.');
