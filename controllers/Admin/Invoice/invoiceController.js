@@ -8,8 +8,8 @@ exports.zohoCallBack = async(req,res) => {
     const response = await axios.post('https://accounts.zoho.com/oauth/v2/token', null, {
             params: {
                 code: authorizationCode,
-                client_id: 'YOUR_CLIENT_ID',
-                client_secret: 'YOUR_CLIENT_SECRET',
+                client_id: '1000.JJ6C0VUUDXGCEIWXCDCLNT89Q12CBW',
+                client_secret: 'af174ae905352501ef89ad254f4a0e1744010bafcf',
                 redirect_uri: 'https://rigsdock-backend.onrender.com/zoho-callback',
                 grant_type: 'authorization_code'
             }

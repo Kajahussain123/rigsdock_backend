@@ -2,8 +2,8 @@ const express = require('express');
 const router = express.Router();
 const invoiceController = require('../../../controllers/Admin/Invoice/invoiceController')
 
-// create invoice
-router.post('/create/:orderId', invoiceController.downloadInvoice);
+// zoho callback
+router.get('/zoho-callback', invoiceController.zohoCallBack);
 
 // // get invoice
 // router.get('/get', jwtVerify(['admin']),invoiceController.getInvoices);
