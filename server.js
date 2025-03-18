@@ -113,6 +113,7 @@ app.use('/admin/financial', adminFinancial);
 app.use('/admin/vendorpayout', adminVendorpayout);
 app.use('/admin/analytics', adminAnalytics);
 app.use('/admin/review', adminReviews);
+app.use('/admin/chat',adminChat)
 
 
 
