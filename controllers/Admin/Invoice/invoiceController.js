@@ -329,31 +329,56 @@ exports.getInvoicePDF = async (req, res) => {
       token.accessToken = (await getTokens()).accessToken;
     }
 
-    // Get the PDF
+    // Get the PDF - Use the correct API endpoint format
     const response = await axios({
       method: 'get',
-      url: `https://invoice.zoho.in/api/v3/invoices/${invoice_id}/pdf`,
+      url: `https://invoice.zoho.in/api/v3/invoices/${invoice_id}?accept=pdf`,
       headers: {
         'X-com-zoho-invoice-organizationid': '60038864380',
-        'Authorization': `Zoho-oauthtoken ${token.accessToken}`,
-        'Accept': 'application/pdf'
+        'Authorization': `Zoho-oauthtoken ${token.accessToken}`
       },
       responseType: 'arraybuffer'
     });
 
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice_id}.pdf"`);
-    
-    // Send the PDF data
-    res.send(Buffer.from(response.data));
+    // Check if the response is actually a PDF
+    const contentType = response.headers['content-type'];
+    if (contentType && contentType.includes('application/pdf')) {
+      // Set response headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice_id}.pdf"`);
+      
+      // Send the PDF data
+      res.send(Buffer.from(response.data));
+    } else {
+      // If it's not a PDF, try to decode and return any error message
+      let errorMessage = 'Unknown error';
+      try {
+        errorMessage = JSON.parse(Buffer.from(response.data).toString());
+      } catch (e) {
+        errorMessage = Buffer.from(response.data).toString();
+      }
+      
+      res.status(500).json({
+        error: 'Response was not a PDF',
+        details: errorMessage
+      });
+    }
   } catch (error) {
-    console.error('Error getting invoice PDF:', 
-      error.response?.data || error.message);
+    console.error('Error getting invoice PDF:', error.message);
+    
+    // Try to parse the error data if it's a buffer
+    let errorDetails = error.response?.data;
+    if (errorDetails && Buffer.isBuffer(errorDetails)) {
+      try {
+        errorDetails = JSON.parse(Buffer.from(errorDetails).toString());
+      } catch (e) {
+        errorDetails = Buffer.from(errorDetails).toString();
+      }
+    }
     
     res.status(500).json({
       error: 'Failed to get invoice PDF',
-      details: error.response?.data || error.message
+      details: errorDetails || error.message
     });
   }
 };
