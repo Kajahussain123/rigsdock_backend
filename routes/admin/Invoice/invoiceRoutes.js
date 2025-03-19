@@ -8,7 +8,7 @@ router.get('/zoho-callback', invoiceController.zohoCallBack);
 
 router.get('/get',invoiceController.getAllTokens);
 
-router.post('/create-invoice',refreshTokenIfExpired,invoiceController.createInvoice);
+router.post('/create-invoice',invoiceController.createInvoice);
 
 router.post('/revoke',invoiceController.revokeToken);
 
