@@ -226,3 +226,29 @@ exports.getAllTokens = async(req,res) => {
         res.status(500).json({ error: 'Error during authorization.', details: error.response ? error.response.data : error.message });
     }
 }
+
+exports.revokeToken = async (req, res) => {
+    try {
+        const { refreshToken } = req.body; // Get token from request body
+
+        if (!refreshToken) {
+            return res.status(400).json({ error: 'Refresh token is required' });
+        }
+
+        await axios.post(
+            `https://accounts.zoho.in/oauth/v2/token/revoke`,
+            null,
+            {
+                params: { token: refreshToken },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            }
+        );
+
+        return res.status(200).json({ message: 'Token revoked successfully' });
+    } catch (error) {
+        return res.status(500).json({
+            error: 'Failed to revoke token',
+            details: error.response?.data || error.message
+        });
+    }
+};
