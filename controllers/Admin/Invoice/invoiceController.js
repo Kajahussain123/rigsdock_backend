@@ -68,14 +68,12 @@ exports.createInvoice = async (req, res) => {
                 "item_id": "9876543210",
                 "name": "Product A",
                 "rate": 1000.0,
-                "quantity": 2,
-                "tax_id": "GST_18"
+                "quantity": 2
               }
             ],
             "sub_total": 2000.0,
-            "tax_total": 360.0,
-            "total": 2360.0,
-            "balance": 2360.0,
+            "total": 2000.0,
+            "balance": 2000.0,
             "billing_address": {
               "address": "123, MG Road, Kochi, Kerala",
               "city": "Kochi",
