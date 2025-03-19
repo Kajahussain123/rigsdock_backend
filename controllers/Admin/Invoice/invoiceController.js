@@ -85,7 +85,7 @@ exports.createInvoice = async (req, res) => {
     // Prepare invoice data with minimal required fields
     const invoiceData = {
       customer_id,
-      invoice_number,
+    //   invoice_number,
       date: new Date().toISOString().split('T')[0], // Today's date
       line_items
     };
