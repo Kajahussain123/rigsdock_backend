@@ -63,7 +63,6 @@ exports.createInvoice = async (req, res) => {
             "invoice_number": "INV-00003",
             "reference_number": " ",
             "place_of_supply": "TN",
-            "vat_treatment": "string",
             "gst_treatment": "business_gst",
             "tax_treatment": "vat_registered",
             "cfdi_usage": "acquisition_of_merchandise",
