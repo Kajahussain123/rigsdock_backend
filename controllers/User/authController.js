@@ -1,20 +1,75 @@
 const User = require('../../models/User/AuthModel');
-const Address = require('../../models/User/AddressModel');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
-// Register a new user
-const register = async (req, res) => {
-    const { username, email, password } = req.body;
+const TWO_FACTOR_API_KEY = '411421e5-c758-11ef-8b17-0200cd936042'; // Replace with your 2Factor API key
+
+// Send OTP to mobile number
+const sendOTP = async (req, res) => {
+    const { mobileNumber } = req.body;
 
     try {
-        // Check if user already exists
-        let user = await User.findOne({ email });
-        if (user) {
-            return res.status(400).json({ message: 'User already exists' });
+        // Send OTP using 2Factor API
+        const response = await axios.get(
+            `https://2factor.in/API/V1/${TWO_FACTOR_API_KEY}/SMS/${mobileNumber}/AUTOGEN`
+        );
+        const sessionId = response.data.Details;
+
+        res.status(200).json({ sessionId, message: 'OTP sent successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+};
+
+// Verify OTP
+const verifyOTP = async (req, res) => {
+    const { sessionId, otp, mobileNumber } = req.body;
+
+    try {
+        // Verify OTP using 2Factor API
+        const response = await axios.get(
+            `https://2factor.in/API/V1/${TWO_FACTOR_API_KEY}/SMS/VERIFY/${sessionId}/${otp}`
+        );
+
+        if (response.data.Details === 'OTP Matched') {
+            // Check if the user is already registered
+            const user = await User.findOne({ mobileNumber });
+
+            if (user) {
+                // User is registered, generate JWT token and log them in
+                const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+                    expiresIn: '1h',
+                });
+                return res.status(200).json({ token, userId: user._id, message: 'Login successful' });
+            } else {
+                // User is not registered, redirect to registration page
+                return res.status(200).json({ 
+                    redirectToRegister: true, 
+                    mobileNumber, 
+                    message: 'OTP verified. Please complete registration.' 
+                });
+            }
+        } else {
+            res.status(400).json({ message: 'Invalid OTP' });
+        }
+    } catch (err) {
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+};
+
+// Register new user with verified mobile number
+const registerWithMobile = async (req, res) => {
+    const { name, email, mobileNumber } = req.body;
+
+    try {
+        // Check if mobile number is already registered
+        const existingUser = await User.findOne({ mobileNumber });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Mobile number already registered' });
         }
 
         // Create new user
-        user = new User({ username, email, password });
+        const user = new User({ name, email, mobileNumber, verified: true });
         await user.save();
 
         // Generate JWT token
@@ -22,58 +77,25 @@ const register = async (req, res) => {
             expiresIn: '1h',
         });
 
-        res.status(201).json({ token, userId: user._id });
+        res.status(201).json({ token, userId: user._id, message: 'User registered successfully' });
     } catch (err) {
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 };
 
-// Login user
-const login = async (req, res) => {
-    const { email, password } = req.body;
-
-    try {
-        // Check if user exists
-        const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(400).json({ message: 'Invalid credentials' });
-        }
-
-        // Compare passwords
-        const isMatch = await user.comparePassword(password);
-        if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid credentials' });
-        }
-
-        // Generate JWT token
-        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-            expiresIn: '1h',
-        });
-
-        res.status(200).json({ token, userId: user._id });
-    } catch (err) {
-        res.status(500).json({ message: 'Server error', error: err.message });
-    }
-};
-
-// Get user profile with addresses
 const getUserProfile = async (req, res) => {
-    try {
-        const { userId } = req.params;
+    const { userId } = req.params; // Extract user ID from URL params
 
-        // Fetch user details
-        const user = await User.findById(userId).select("-password");
+    try {
+        const user = await User.findById(userId).select('-password'); // Exclude password
         if (!user) {
-            return res.status(404).json({ message: "User not found" });
+            return res.status(404).json({ message: 'User not found' });
         }
 
-        // Fetch user's addresses
-        const addresses = await Address.find({ user: userId });
-
-        res.status(200).json({ user, addresses });
+        res.status(200).json(user);
     } catch (err) {
-        res.status(500).json({ message: "Error fetching user profile", error: err.message });
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 };
 
-module.exports = { register, login, getUserProfile };
+module.exports = { sendOTP, verifyOTP, registerWithMobile, getUserProfile  };
