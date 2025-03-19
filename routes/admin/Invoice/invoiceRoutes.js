@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const invoiceController = require('../../../controllers/Admin/Invoice/invoiceController')
+const invoiceController = require('../../../controllers/Admin/Invoice/invoiceController');
+const { refreshTokenIfExpired } = require('../../../middleware/refreshTokenIfExpired');
 
 // zoho callback
 router.get('/zoho-callback', invoiceController.zohoCallBack);
+
+router.get('/get',invoiceController.getAllTokens);
+
+router.get('/create-invoice',refreshTokenIfExpired,invoiceController.createInvoice);
 
 // // get invoice
 // router.get('/get', jwtVerify(['admin']),invoiceController.getInvoices);
