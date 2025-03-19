@@ -1,7 +1,8 @@
 const axios = require('axios');
-const Token = require('../models/admin/ZohoTokenModel'); // Adjust the path as needed
+const Token = require('../models/admin/ZohoTokenModel');
+const {refreshTokens} = require('../controllers/Admin/Invoice/invoiceController');
 
-const refreshTokenIfExpired = async (req, res, next) => {
+exports.refreshTokenIfExpired = async (req, res, next) => {
     const tokens = await Token.findOne().sort({ createdAt: -1 }); // Get the latest tokens
     if (!tokens) {
         return res.status(401).json({ error: 'No tokens found' });
@@ -9,9 +10,10 @@ const refreshTokenIfExpired = async (req, res, next) => {
 
     try {
         // Make a test API call to check if the token is valid
-        await axios.get('https://invoice.zoho.com/api/v3/settings/currencies', {
+        await axios.get('https://invoice.zoho.in/api/v3/settings/currencies', {
             headers: {
-                Authorization: `Zoho-oauthtoken ${tokens.accessToken}`
+                'X-com-zoho-invoice-organizationid': '10234695',
+                'Authorization': `Zoho-oauthtoken ${tokens.accessToken}`
             }
         });
         next(); // Token is valid, proceed to the next middleware/route
