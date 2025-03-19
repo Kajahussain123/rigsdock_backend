@@ -55,90 +55,35 @@ exports.createInvoice = async (req, res) => {
       const response = await axios.post(
           'https://invoice.zoho.in/api/v3/invoices',
           {
-            "customer_id": 982000000567001,
-            "contact_persons": [
-                "982000000870911",
-                "982000000870915"
-            ],
-            "invoice_number": "INV-00003",
-            "reference_number": " ",
-            "place_of_supply": "TN",
+            "invoice_number": "INV-1001",
+            "date": "2025-03-19",
+            "due_date": "2025-04-18",
+            "customer_id": "1234567890",
+            "place_of_supply": "Kerala",
+            "gst_no": "29ABCDE1234F1Z5",
             "gst_treatment": "business_gst",
-            "tax_treatment": "vat_registered",
-            "cfdi_usage": "acquisition_of_merchandise",
-            "gst_no": "22AAAAA0000A1Z5",
-            "template_id": 982000000000143,
-            "date": "2013-11-17",
-            "payment_terms": 15,
-            "payment_terms_label": "Net 15",
-            "due_date": "2013-12-03",
-            "discount": 0,
-            "is_discount_before_tax": true,
-            "discount_type": "item_level",
-            "is_inclusive_tax": false,
-            "exchange_rate": 1,
-            "recurring_invoice_id": " ",
-            "invoiced_estimate_id": " ",
-            "salesperson_name": " ",
-            "custom_fields": [
-                {
-                    "label": "Record Number",
-                    "value": 23
-                }
-            ],
-            "project_id": 90300000087378,
+            "currency_code": "INR",
             "line_items": [
-                {
-                    "item_id": 982000000030049,
-                    "project_id": 90300000087378,
-                    "time_entry_ids": [],
-                    "expense_id": " ",
-                    "name": "Hard Drive",
-                    "product_type": "goods",
-                    "hsn_or_sac": 80540,
-                    "sat_item_key_code": 71121206,
-                    "unitkey_code": "E48",
-                    "description": "500GB, USB 2.0 interface 1400 rpm, protective hard case.",
-                    "item_order": 1,
-                    "rate": 120,
-                    "quantity": 1,
-                    "unit": " ",
-                    "discount": 0,
-                    "tax_id": 982000000557028,
-                    "tds_tax_id": "982000000557012",
-                    "tax_exemption_id": 11149000000061054,
-                    "avatax_use_code": "string",
-                    "avatax_exempt_no": "string",
-                    "tax_name": "VAT",
-                    "tax_type": "tax",
-                    "tax_percentage": 12.5,
-                    "item_total": 120
-                }
+              {
+                "item_id": "9876543210",
+                "name": "Product A",
+                "rate": 1000.0,
+                "quantity": 2,
+                "tax_id": "GST_18"
+              }
             ],
-            "payment_options": {
-                "payment_gateways": [
-                    {
-                        "configured": true,
-                        "additional_field1": "standard",
-                        "gateway_name": "paypal"
-                    }
-                ]
-            },
-            "allow_partial_payments": true,
-            "custom_body": " ",
-            "custom_subject": " ",
-            "notes": "Looking forward for your business.",
-            "terms": "Terms & Conditions apply",
-            "shipping_charge": 0,
-            "adjustment": 0,
-            "adjustment_description": " ",
-            "reason": " ",
-            "tax_authority_id": 11149000000061052,
-            "tax_exemption_id": 11149000000061054,
-            "avatax_use_code": "string",
-            "avatax_tax_code": "string",
-            "avatax_exempt_no": "string"
-        },
+            "sub_total": 2000.0,
+            "tax_total": 360.0,
+            "total": 2360.0,
+            "balance": 2360.0,
+            "billing_address": {
+              "address": "123, MG Road, Kochi, Kerala",
+              "city": "Kochi",
+              "state": "Kerala",
+              "zip": "682001",
+              "country": "India"
+            }
+          },
           {
             headers: {
                 'X-com-zoho-invoice-organizationid': '60038864380',
