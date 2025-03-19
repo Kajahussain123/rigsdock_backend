@@ -72,7 +72,7 @@ exports.createInvoice = async (req, res) => {
     // Get customer_id and line_items from request body or use defaults
     const {
       customer_id = req.body.customer_id || "1234567890",
-      invoice_number = req.body.invoice_number || `INV-${Date.now()}`,
+    //   invoice_number = req.body.invoice_number || `INV-${Date.now()}`,
       line_items = req.body.line_items || [
         {
           name: 'Product A',
