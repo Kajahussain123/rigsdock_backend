@@ -75,7 +75,7 @@ exports.createInvoice = async (req, res) => {
             "total": 2000.0,
             "balance": 2000.0,
             "billing_address": {
-              "address": "123, MG Road, Kochi, Kerala",
+              "address": "123, MG Road, Kochi",
               "city": "Kochi",
               "state": "Kerala",
               "zip": "682001",
