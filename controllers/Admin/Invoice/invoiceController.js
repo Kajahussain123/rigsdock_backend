@@ -11,7 +11,7 @@ exports.zohoCallBack = async(req,res) => {
 
   // Exchange the authorization code for an access token
   try {
-    const response = await axios.post('https://accounts.zoho.com/oauth/v2/token', null, {
+    const response = await axios.post('https://accounts.zoho.in/oauth/v2/token', null, {
             params: {
                 code: authorizationCode,
                 client_id: '1000.2D0GSSBGVDS0V53RJPLO39ME6YZ2FG',
@@ -20,7 +20,7 @@ exports.zohoCallBack = async(req,res) => {
                 grant_type: 'authorization_code'
             }
         });
-        console.log('Response :', response.data);
+        console.log('Full Response: ', response.data);
 
 
         const accessToken = response.data.access_token;
