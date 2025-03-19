@@ -45,8 +45,8 @@ const getTokens = async () => {
 };
 
 exports.createInvoice = async (req, res) => {
-  let tokens = await getTokens();
-  if (!tokens) {
+  let tokens = await Token.find();
+  if (tokens.length === 0) {
       return res.status(401).json({ error: 'No tokens found' });
   }
 
@@ -142,8 +142,8 @@ exports.createInvoice = async (req, res) => {
         },
           {
             headers: {
-                'X-com-zoho-invoice-organizationid': '10234695',
-                'Authorization': `Zoho-oauthtoken ${tokens.accessToken}`,
+                'X-com-zoho-invoice-organizationid': '60038864380',
+                'Authorization': `Zoho-oauthtoken ${tokens[0].accessToken}`,
                 'Content-Type': 'application/json'
             }
           }
@@ -172,7 +172,7 @@ exports.createInvoice = async (req, res) => {
                   },
                   {
                     headers: {
-                        'X-com-zoho-invoice-organizationid': '10234695',
+                        'X-com-zoho-invoice-organizationid': '60038864380',
                         'Authorization': `Zoho-oauthtoken ${tokens.accessToken}`,
                         'Content-Type': 'application/json'
                     }
