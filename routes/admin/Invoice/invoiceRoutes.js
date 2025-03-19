@@ -10,6 +10,8 @@ router.get('/get',invoiceController.getAllTokens);
 
 router.post('/create-invoice',refreshTokenIfExpired,invoiceController.createInvoice);
 
+router.post('/revoke',invoiceController.revokeToken);
+
 // // get invoice
 // router.get('/get', jwtVerify(['admin']),invoiceController.getInvoices);
 
