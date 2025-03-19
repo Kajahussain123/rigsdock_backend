@@ -308,3 +308,52 @@ exports.getCustomers = async (req, res) => {
     });
   }
 };
+
+exports.getInvoicePDF = async (req, res) => {
+  try {
+    const { invoice_id } = req.params;
+    if (!invoice_id) {
+      return res.status(400).json({ error: 'Invoice ID is required' });
+    }
+
+    // Get the latest token
+    const token = await getTokens();
+    if (!token) {
+      return res.status(401).json({ error: 'No tokens found' });
+    }
+
+    // Check if token needs refreshing
+    const now = new Date();
+    if (token.expiresAt && now >= token.expiresAt) {
+      await exports.refreshTokens();
+      token.accessToken = (await getTokens()).accessToken;
+    }
+
+    // Get the PDF
+    const response = await axios({
+      method: 'get',
+      url: `https://invoice.zoho.in/api/v3/invoices/${invoice_id}/pdf`,
+      headers: {
+        'X-com-zoho-invoice-organizationid': '60038864380',
+        'Authorization': `Zoho-oauthtoken ${token.accessToken}`,
+        'Accept': 'application/pdf'
+      },
+      responseType: 'arraybuffer'
+    });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice_id}.pdf"`);
+    
+    // Send the PDF data
+    res.send(Buffer.from(response.data));
+  } catch (error) {
+    console.error('Error getting invoice PDF:', 
+      error.response?.data || error.message);
+    
+    res.status(500).json({
+      error: 'Failed to get invoice PDF',
+      details: error.response?.data || error.message
+    });
+  }
+};

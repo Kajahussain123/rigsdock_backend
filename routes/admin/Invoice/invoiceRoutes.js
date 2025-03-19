@@ -15,5 +15,6 @@ router.post('/revoke-token',invoiceController.revokeToken);
 router.post('/create-invoice',invoiceController.createInvoice);
 router.get('/customers',invoiceController.getCustomers);
 
+router.get('/invoices/:invoice_id', invoiceController.getInvoicePDF);
 
 module.exports = router;
