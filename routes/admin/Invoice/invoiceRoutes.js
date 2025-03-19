@@ -1,25 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const invoiceController = require('../../../controllers/Admin/Invoice/invoiceController')
+const invoiceController = require('../../../controllers/Admin/Invoice/invoiceController');
+const { refreshTokenIfExpired } = require('../../../middleware/refreshTokenIfExpired');
 
-// create invoice
-router.post('/create/:orderId', invoiceController.downloadInvoice);
+// Auth routes
+router.get('/zoho-auth',invoiceController.initiateZohoAuth);
+router.get('/zoho-callback',invoiceController.zohoCallBack);
 
-// // get invoice
-// router.get('/get', jwtVerify(['admin']),invoiceController.getInvoices);
+// Token management
+router.get('/tokens',invoiceController.getAllTokens);
+router.post('/revoke-token',invoiceController.revokeToken);
 
-// // update
-// router.patch('/update/:id', jwtVerify(['admin']), invoiceController.updateInvoice);
+// Invoice operations
+router.post('/create-invoice',invoiceController.createInvoice);
+router.get('/customers',invoiceController.getCustomers);
 
-// // delete
-// router.delete('/delete/:id',  jwtVerify(['admin']),invoiceController.deleteInvoice);
-
-
-// // Fetch invoices with search
-// router.get('/search', /*  jwtVerify(['admin']) ,*/invoiceController.searchInvoices);
-
-// // Filter route
-// router.get('/filter', invoiceController.filterInvoices);
-
+router.get('/invoices/:invoice_id', invoiceController.getInvoicePDF);
 
 module.exports = router;
