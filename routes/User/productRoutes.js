@@ -13,12 +13,6 @@ router.get("/get/:mainCategoryId/:categoryId/:subCategoryId", productController.
 
 router.get("/search/:query", productController.searchProductsByName);
 
-router.get("/filter-by-brand", productController.filterProductsByBrand);
 
-// 💰 Filter Products by Price Range
-router.get("/filter-by-price-range", productController.filterProductsByPriceRange);
-
-// ⭐ Filter Products by Rating
-router.get("/filter-by-rating", productController.filterProductsByRating);
 
 module.exports = router;
