@@ -4,6 +4,8 @@ const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
+    BISCode: { type: String },
+    HSNCode: { type: String },
     price: { type: Number, required: true, min: 0 },
     // finalPrice stores the effective price (updated by deal or offer)
     finalPrice: {
