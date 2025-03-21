@@ -8,7 +8,7 @@ const path = require("path");
 
 //create a new subcategory
 exports.createProduct = async (req, res) => {
-  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory } = req.body;
+  const { name, description, price, stock,brand, BISCode, HSNCode , subcategory, attributes,category,maincategory } = req.body;
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "At least one product image is required" });
@@ -34,6 +34,8 @@ exports.createProduct = async (req, res) => {
       stock,
       images: imagePaths,
       brand,
+      BISCode,
+      HSNCode,
       category,
       maincategory,
       ownerType: req.user.role,

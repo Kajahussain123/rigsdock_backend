@@ -20,4 +20,6 @@ router.post("/remove", cartController.removeFromCart);
 // Clear cart
 router.delete("/clear/:userId", cartController.clearCart);
 
+router.post("/update-quantity", cartController.updateCartQuantity);
+
 module.exports = router;
