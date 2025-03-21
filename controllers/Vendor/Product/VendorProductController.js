@@ -13,7 +13,7 @@ exports.createProduct = async (req, res) => {
 
     const imagePaths = req.files.images.map((file) => file.filename);
 
-    if (!name || !description || !price || !stock || !subcategory || !brand || !category || !maincategory) {
+    if (!name || !description || !price || !stock || !brand || !category || !maincategory) {
       return res.status(400).json({ message: "All fields are required" });
     }
 

@@ -175,8 +175,17 @@ exports.searchProductsByName = async (req, res) => {
   }
 };
 
-
-
-
-
-
+exports.getProductByCategory = async(req,res) => {
+  try {
+    const { categoryId } = req.params;
+    console.log(categoryId);
+    const product = await Product.find({ category: categoryId });
+    console.log(product)
+    if(product.length === 0) {
+      return res.status(404).json({ message: "no product founded" })
+    }
+    res.status(200).json(product);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching products", error: error.message });
+  }
+}

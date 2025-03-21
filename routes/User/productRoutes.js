@@ -13,6 +13,9 @@ router.get("/get/:mainCategoryId/:categoryId/:subCategoryId", productController.
 
 router.get("/search/:query", productController.searchProductsByName);
 
+router.get("/category/:categoryId/products",productController.getProductByCategory)
+
+
 
 
 module.exports = router;
