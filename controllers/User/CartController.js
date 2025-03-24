@@ -318,3 +318,19 @@ exports.updateCartQuantity = async (req, res) => {
     }
 };
 
+exports.getCartCount = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const cart = await Cart.findOne({ user: userId });
+
+        if (!cart) {
+            return res.status(200).json({ cartCount: 0 });
+        }
+
+        const cartCount = cart.items.reduce((count, item) => count + item.quantity, 0);
+
+        res.status(200).json({ cartCount });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching cart count", error: error.message });
+    }
+};
