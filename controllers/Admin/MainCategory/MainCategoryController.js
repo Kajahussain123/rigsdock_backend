@@ -4,12 +4,18 @@ const MainCategory = require('../../../models/admin/MainCategoryModel');
 exports.createMainCategory = async(req,res) => {
     try {
         const { name,description } = req.body;
+
+        if(!req.file){
+            return res.status(400).json({ message: "Notification Image is required" })
+        }
+
         if(!name || !description){
             return res.status(400).json({ message: 'name and description is required' })
         }
         const newMainCategory = new MainCategory({
             name,
-            description
+            description,
+            image: req.file.filename,
         });
         await newMainCategory.save();
         res.status(201).json({
@@ -34,3 +40,16 @@ exports.getMainCategory = async(req,res) => {
         res.status(500).json({ message: "Error fetching mainCategories", error: error.message });
     }
 }
+
+// exports.updateMaincategory = async(req,res) => {
+//     try {
+//         const {id} = req.params;
+//         const maincategory = await MainCategory.findByIdAndUpdate(id,{image:req.file.filename},{ new: true })
+//         if(!maincategory) {
+//             return res.status(404).json({ message: "Main Categories not updated" })
+//         }
+//         res.status(200).json({ message: "mainCategories updated successfully",maincategory })
+//     } catch (error) {
+//         res.status(500).json({ message: "Error updating mainCategories", error: error.message });
+//     }
+// }

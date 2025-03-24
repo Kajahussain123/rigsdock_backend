@@ -29,7 +29,10 @@ exports.createCategory = async (req, res) => {
 exports.getCategories = async (req, res) => {
     try {
         const categories = await Category.find().populate('maincategory');
-        res.status(200).json(categories);
+        res.status(200).json({
+            total: categories.length,
+            categories
+        });
     } catch (err) {
         res.status(500).json({ message: 'Error fetching categories', error: err.message });
     }
@@ -85,5 +88,21 @@ exports.deleteCategory = async (req, res) => {
         res.status(200).json({ message: 'Category deleted successfully' });
     } catch (err) {
         res.status(500).json({ message: 'Error deleting category', error: err.message });
+    }
+};
+
+
+exports.getSubCategoriesByMainCategory = async (req, res) => {
+    try {
+        const { mainCategoryId } = req.params;
+        const subcategories = await Category.find({ maincategory: mainCategoryId });
+
+        if (!subcategories.length) {
+            return res.status(404).json({ message: 'No subcategories found for this main category' });
+        }
+
+        res.status(200).json(subcategories);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching subcategories', error: err.message });
     }
 };

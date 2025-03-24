@@ -2,12 +2,12 @@ const SubCategory = require("../../../models/admin/SubCategoryModel");
 
 //create a new subcategory
 exports.createSubCategory = async (req, res) => {
-  const { name, description,category } = req.body;
+  const { name, description,category,status } = req.body;
   try {
-    const newSubCategory = new SubCategory({ name, description,category });
     if(!category){
       return res.status(400).json({ message: 'category is required' })
     }
+    const newSubCategory = new SubCategory({ name, description,category,status });
     await newSubCategory.save();
     res
       .status(201)
@@ -24,7 +24,10 @@ exports.createSubCategory = async (req, res) => {
 exports.getSubCategories = async (req, res) => {
   try {
     const subCategories = await SubCategory.find().populate('category')
-    res.status(200).json({ subCategories });
+    res.status(200).json({
+      total: subCategories.length,
+      subCategories
+    });
   } catch (err) {
     res
       .status(500)
@@ -67,7 +70,7 @@ exports.getSubCategoryByCategory = async(req,res) => {
 exports.updateSubCategory = async (req, res) => {
   const { id } = req.params;
   // const { name,description,category } = req.body;
-  const { name, description } = req.body;
+  const { name, description, status, category } = req.body;
 
   try {
     const subCategory = await SubCategory.findById(id);
@@ -76,7 +79,8 @@ exports.updateSubCategory = async (req, res) => {
     }
     if (name) subCategory.name = name;
     if (description) subCategory.description = description;
-    // if(category) subCategory.category = category;
+    if(category) subCategory.category = category;
+    if (status) subCategory.status = status;
     await subCategory.save();
     res
       .status(200)
@@ -103,5 +107,27 @@ exports.deleteSubCategory = async (req, res) => {
     res
       .status(500)
       .json({ message: "Error deleting subcategory", error: err.message });
+  }
+};
+
+
+exports.getSubCategoriesByMainAndCategory = async (req, res) => {
+  try {
+      const { mainCategoryId, categoryId } = req.params;
+
+      const subCategories = await SubCategory.find({ category: categoryId })
+          .populate({
+              path: 'category',
+              match: { maincategory: mainCategoryId } 
+          })
+          .then(data => data.filter(sub => sub.category !== null)); 
+
+      if (!subCategories.length) {
+          return res.status(404).json({ message: "No subcategories found for this main category and category" });
+      }
+
+      res.status(200).json(subCategories);
+  } catch (err) {
+      res.status(500).json({ message: "Error fetching subcategories", error: err.message });
   }
 };
