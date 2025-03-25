@@ -2,6 +2,7 @@ const Order = require("../../models/User/OrderModel");
 const Cart = require("../../models/User/CartModel");
 const Address = require("../../models/User/AddressModel");
 const MainOrder = require("../../models/User/MainOrderModel");
+const { createShiprocketOrder } = require('../../controllers/Shiprocket/ShipRocketController')
 // Place an order (POST method)
 exports.placeOrder = async (req, res) => {
     try {
@@ -94,10 +95,28 @@ exports.placeOrder = async (req, res) => {
         // Clear the cart after placing the order
         await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
 
+        // Step 2: Create Shiprocket shipments for each sub-order
+        const shiprocketResponses = [];
+        for (const subOrderId of createdOrders) {
+            const subOrder = await Order.findById(subOrderId);
+
+            // Create Shiprocket order for each subOrder
+            const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress,userId);
+
+            // Save Shiprocket IDs to the subOrder
+            subOrder.shiprocketOrderId = response.order_id;
+            subOrder.shiprocketShipmentId = response.shipment_id;
+            await subOrder.save();
+            console.log("subOrder",subOrder);
+
+            shiprocketResponses.push(response);
+        }
+
         res.status(201).json({
-            message: "Orders placed successfully",
+            message: "Orders placed and Shiprocket shipments created successfully",
             mainOrderId: mainOrder._id,
             orders: createdOrders,
+            shiprocketResponses,
         });
     } catch (error) {
         console.error("Error placing order:", error);

@@ -51,7 +51,7 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["Processing", "Shipped", "Delivered", "Cancelled"],
+      enum: ["Processing", "Shipped", "Delivered", "Cancelled", "Return"],
       default: "Processing",
     },
     shippingAddress: {
@@ -59,6 +59,11 @@ const orderSchema = new mongoose.Schema(
       ref: "Address",
       required: true,
     },
+    shiprocketOrderId: { type: String },
+    shiprocketShipmentId: { type: String },
+    trackingNumber: { type: String },
+    courier: { type: String },
+    awb: { type: String }
   },
   { timestamps: true }
 );

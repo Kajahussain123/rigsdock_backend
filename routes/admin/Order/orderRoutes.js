@@ -12,4 +12,7 @@ router.patch('/update/:orderId',verifyToken(['Admin']),orderController.updateOrd
 // get order by id
 router.get('/get/:orderId',verifyToken(['Admin']),orderController.getOrderById);
 
+// track order
+router.get('/track-order/:orderId',verifyToken(['Admin']),orderController.trackOrder);
+
 module.exports = router;
