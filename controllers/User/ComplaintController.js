@@ -3,6 +3,7 @@ const Order = require("../../models/User/OrderModel");
 const Product = require("../../models/admin/ProductModel");
 const multer = require("multer");
 const path = require("path");
+const { registerShiprocketReturnOrder } = require('../../controllers/Shiprocket/ShipRocketController');
 
 
 // Register a complaint (only for delivered products)
@@ -19,7 +20,7 @@ exports.registerComplaint = async (req, res) => {
             user: userId,
             orderStatus: "Delivered",
             "items.product": productId
-        });
+        }).populate('user').populate('shippingAddress').populate('items.product').populate('vendor');
 
         if (!order) {
             return res.status(400).json({ message: "You can only register a complaint for delivered products." });
@@ -43,7 +44,18 @@ exports.registerComplaint = async (req, res) => {
 
         await newComplaint.save();
 
-        res.status(201).json({ message: "Complaint registered successfully", complaint: newComplaint });
+        const returnOrderResponse = await registerShiprocketReturnOrder(order, product);
+
+        // Update order status to "Return"
+        order.orderStatus = "Return";
+        await order.save();
+
+        res.status(201).json({ 
+            message: "Complaint registered successfully", 
+            complaint: newComplaint, 
+            shiprocketReturn: returnOrderResponse,
+            updatedOrderStatus: order.orderStatus
+        });
     } catch (error) {
         res.status(500).json({ message: "Error registering complaint", error: error.message });
     }

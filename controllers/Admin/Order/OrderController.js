@@ -1,4 +1,5 @@
 const Order = require('../../../models/User/OrderModel');
+const { trackShipment } = require('../../../controllers/Shiprocket/ShipRocketController');
 
 // get all orders
 exports.getAllOrders = async (req,res) => {
@@ -42,5 +43,30 @@ exports.getOrderById = async(req,res) => {
         res.status(200).json(order);
     } catch (error) {
         res.status(500).json({ message: 'Error fetch order', error:error.message })
+    }
+}
+
+exports.trackOrder = async(req,res) => {
+    try {
+        const { orderId } = req.params;
+
+        // Fetch the order from the database
+        const order = await Order.findById(orderId);
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        console.log("tracker order",order)
+
+        // Fetch Shiprocket tracking details
+        const trackingInfo = await trackShipment(order.shiprocketOrderId);
+
+        res.status(200).json({
+            message: 'Order status fetched successfully',
+            orderStatus: order.orderStatus,
+            trackingInfo,
+        });
+    } catch (error) {
+        console.error('Error tracking order:', error);
+        res.status(500).json({ message: 'Error tracking order', error: error.message });
     }
 }

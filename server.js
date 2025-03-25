@@ -87,6 +87,7 @@ const complaintsRoutes = require('./routes/User/ComplaintRoutes')
 const dealofthedayUserRoutes= require('./routes/User/dealOfTheDayRoutes')
 const vendorUserRoutes=require('./routes/User/vendorRoutes')
 const platFormFee = require('./routes/admin/PlatformFee/PlatformFeeRoutes')
+const userShiprocket = require('./routes/User/ShiprocketRoutes');
 
 // Token Refresh
 app.use("/token", tokenRefresh);
@@ -152,6 +153,7 @@ app.use("/user/reviews",userReviewsRoutes)
 app.use("/user/complaint",complaintsRoutes)
 app.use("/user/dealoftheday",dealofthedayUserRoutes)
 app.use("/user/vendor",vendorUserRoutes)
+app.use("/user/shiprocket",userShiprocket);
 
 
 // Serve uploaded files
