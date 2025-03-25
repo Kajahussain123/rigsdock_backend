@@ -1,15 +1,18 @@
 const express = require('express');
-const { register, login, getUserProfile } = require('../../controllers/User/authController');
+const { sendOTP, verifyOTP, registerWithMobile ,getUserProfile } = require('../../controllers/User/authController');
 
 const router = express.Router();
 
-// Register route
-router.post('/register', register);
+// Send OTP route
+router.post('/send-otp', sendOTP);
 
-// Login route
-router.post('/login', login);
+// Verify OTP route
+router.post('/verify-otp', verifyOTP);
 
-// Get user profile including addresses
+// Register with verified mobile number route
+router.post('/register-with-mobile', registerWithMobile);
+
+
 router.get('/profile/:userId', getUserProfile);
 
 module.exports = router;

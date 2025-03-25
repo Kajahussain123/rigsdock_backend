@@ -8,6 +8,9 @@ router.post("/add", cartController.addToCart);
 // Get user's cart
 router.get("/:userId", cartController.getCart);
 
+// Get user's cart count
+router.get("/count/:userId", cartController.getCartCount);
+
 // Apply coupon
 router.post("/apply-coupon", cartController.applyCoupon);
 
@@ -19,5 +22,7 @@ router.post("/remove", cartController.removeFromCart);
 
 // Clear cart
 router.delete("/clear/:userId", cartController.clearCart);
+
+router.post("/update-quantity", cartController.updateCartQuantity);
 
 module.exports = router;

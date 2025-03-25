@@ -259,3 +259,78 @@ exports.removeCoupon = async (req, res) => {
     }
 };
 
+
+// Update product quantity in cart
+exports.updateCartQuantity = async (req, res) => {
+    try {
+        const { userId, productId, action } = req.body; // action: "increase" or "decrease"
+
+        let cart = await Cart.findOne({ user: userId });
+        if (!cart) {
+            return res.status(404).json({ message: "Cart not found" });
+        }
+
+        // Find the product in the cart
+        const cartItem = cart.items.find(item => item.product.toString() === productId);
+        if (!cartItem) {
+            return res.status(404).json({ message: "Product not found in cart" });
+        }
+
+        // Increase or decrease quantity
+        if (action === "increase") {
+            cartItem.quantity += 1;
+        } else if (action === "decrease") {
+            if (cartItem.quantity > 1) {
+                cartItem.quantity -= 1;
+            } else {
+                return res.status(400).json({ message: "Minimum quantity is 1" });
+            }
+        } else {
+            return res.status(400).json({ message: "Invalid action. Use 'increase' or 'decrease'" });
+        }
+
+        // ✅ Ensure cart.items is not empty before calculating totalPrice
+        cart.totalPrice = cart.items.length > 0 
+            ? cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) 
+            : 0;
+
+        // ✅ Fetch platform fee config
+        const feeConfig = await PlatformFee.findOne();
+        let platformFee = 0;
+        if (feeConfig) {
+            platformFee = feeConfig.feeType === "fixed"
+                ? feeConfig.amount
+                : (feeConfig.amount / 100) * cart.totalPrice;
+        }
+
+        cart.platformFee = platformFee;
+        cart.totalPrice += platformFee;
+
+        // ✅ Ensure coupon discountAmount is a number before subtracting
+        const discountAmount = cart.coupon?.discountAmount || 0;
+        cart.totalPrice -= discountAmount; // Deduct coupon discount
+
+        await cart.save();
+        res.status(200).json({ message: "Cart updated successfully", cart });
+    } catch (error) {
+        console.error("Error updating cart:", error);
+        res.status(500).json({ message: "Error updating cart", error: error.message });
+    }
+};
+
+exports.getCartCount = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const cart = await Cart.findOne({ user: userId });
+
+        if (!cart) {
+            return res.status(200).json({ cartCount: 0 });
+        }
+
+        const cartCount = cart.items.reduce((count, item) => count + item.quantity, 0);
+
+        res.status(200).json({ cartCount });
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching cart count", error: error.message });
+    }
+};
