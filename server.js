@@ -48,6 +48,7 @@ const adminVendorpayout = require('./routes/admin/vendorPayout/vendorPayoutRoute
 const adminAnalytics = require('./routes/admin/Analytics/analyticsRoutes');
 const adminReviews = require('./routes/admin/Review/ReviewRoute');
 const adminChat = require('./routes/admin/Chat/chatRoute');
+const adminShiprocket = require('./routes/admin/Shiprocket/adminShiprocketRoute');
 
 
 // Vendor Routes
@@ -68,6 +69,7 @@ const vendorAnalytics = require('./routes/Vendor/Analytics/analyticsRoutes');
 const vendorReview = require('./routes/Vendor/Review/reviewRoutes');
 const vendorInsights = require('./routes/Vendor/Insights/insightsRoute');
 const vendorChat = require('./routes/Vendor/Chat/vendorChatRoute');
+const vendorShiprocket = require('./routes/Vendor/Shiprocket/vendorShiprocketRoute');
 
 
 
@@ -115,6 +117,7 @@ app.use('/admin/vendorpayout', adminVendorpayout);
 app.use('/admin/analytics', adminAnalytics);
 app.use('/admin/review', adminReviews);
 app.use('/admin/chat',adminChat)
+app.use('/admin/shiprocket',adminShiprocket)
 
 
 
@@ -136,6 +139,7 @@ app.use("/vendor/analytics", vendorAnalytics);
 app.use("/vendor/review", vendorReview);
 app.use("/vendor/insights", vendorInsights);
 app.use("/vendor/chat", vendorChat);
+app.use("/vendor/shiprocket", vendorShiprocket);
 
 
 // User Routes

@@ -191,8 +191,29 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
   }
 }
 
+async function getAllOrderDetails() {
+  try {
+    const token = await getShiprocketToken();
+    
+    const response = await axios.get(
+      `https://apiv2.shiprocket.in/v1/external/orders`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error get All Order Details:', error);
+    throw error;
+  }
+}
+
 // 4. Track Shipment Status
-async function trackShipment(shiprocketOrderId) {
+async function getSpecificOrderDetails(shiprocketOrderId) {
   try {
     const token = await getShiprocketToken();
     
@@ -309,6 +330,56 @@ async function registerShiprocketReturnOrder(order, product) {
       throw new Error('Failed to register return order with Shiprocket');
   }
 }
+
+async function trackOrderById(orderId) {
+  try {
+    // 1. Find the order in your database
+    const order = await Order.findById(orderId);
+    
+    if (!order) {
+      throw new Error('Order not found in database');
+    }
+
+    // 2. Check if it has a Shiprocket ID
+    if (!order.shiprocketOrderId) {
+      throw new Error('This order is not yet processed with Shiprocket');
+    }
+
+    // 3. Get Shiprocket tracking info
+    const token = await getShiprocketToken();
+    const response = await axios.get(
+      'https://apiv2.shiprocket.in/v1/external/courier/track',
+      {
+        params: {
+          order_id: order.shiprocketOrderId // Use the Shiprocket order ID
+        },
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    return {
+      orderDetails: order,
+      trackingInfo: response.data
+    };
+  } catch (error) {
+    console.error(`Tracking failed for order ${orderId}:`, error);
+
+    if (error.response) {
+      console.error('Shiprocket API Error:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    }
+
+    throw error;
+  }
+}
+
+// -----------------------------------------------------------------
 
 // 5. Update Order Status in Database
 async function updateOrderStatus(subOrderId, status) {
@@ -436,4 +507,4 @@ async function callShiprocketAPI(endpoint, method = 'get', data = null) {
   }
 }
 
-module.exports = { createShiprocketOrder,trackShipment,cancelShiprocketOrder,registerShiprocketReturnOrder };
+module.exports = { createShiprocketOrder,getSpecificOrderDetails,cancelShiprocketOrder,registerShiprocketReturnOrder,trackOrderById,getAllOrderDetails };
