@@ -87,10 +87,7 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
         name: product.name,
         sku: product.sku || product._id.toString(),
         units: item.quantity,
-        selling_price: item.price / item.quantity,
-        discount: 0,
-        tax: 0,
-        hsn: product.hsn || ''
+        selling_price: subOrder.totalPrice,
       });
       
       // Calculate total weight (assuming weight is in kg)
@@ -109,16 +106,16 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
       // Required fields
       order_id: subOrder._id,
       order_date: subOrder.createdAt,
-      pickup_location: "Home",
-      billing_customer_name: "akshay",
-      billing_last_name: "PP",
-      billing_address: address.addressLine1,
+      pickup_location: "bijay",
+      billing_customer_name: user.name,
+      billing_last_name: "kk",
+      billing_address: `${address.addressLine1},${address.addressLine2}`,
       billing_city: address.city,
       billing_pincode: parseInt(address.zipCode),
       billing_state: address.state,
       billing_country: address.country,
       billing_email: user.email,
-      billing_phone: 9562100653,
+      billing_phone: parseInt(user.mobileNumber),
       shipping_is_billing: true,
       
       // // Conditional required fields (since shipping_is_billing is false)
@@ -131,24 +128,11 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
       // shipping_phone: 8765432109,
       
       // Required item details
-      order_items: [
-        {
-          name: "Cotton T-Shirt",
-          sku: "TS-COT-BLK-M",
-          units: 2,
-          selling_price: 799
-        },
-        {
-          name: "Denim Jeans",
-          sku: "DJ-BLU-32",
-          units: 1,
-          selling_price: 1499
-        }
-      ],
+      order_items: orderItems,
       
       // Required payment info
-      payment_method: "Prepaid",
-      sub_total: 3097,
+      payment_method: subOrder.paymentMethod,
+      sub_total: mainOrder.totalAmount,
       
       // Required package dimensions
       length: 10,
@@ -269,33 +253,40 @@ async function registerShiprocketReturnOrder(order, product) {
   try {
       // Get Shiprocket authentication token (you'll need to implement token retrieval)
       const authToken = await getShiprocketToken();
-      console.log('pickup_customer_name :',order.user.name)
+      const orderId = parseInt(order._id.toString().slice(-6), 16);
+
+      const orderItems = [];
+
+      for (const item of order.items) {
+        const product = await Product.findById(item.product);
+        orderItems.push({
+          name: product.name,
+          sku: product.sku || product._id.toString(),
+          units: item.quantity,
+          selling_price: order.totalPrice,
+        });
+      }
 
       // Prepare return order payload
       const returnOrderPayload = {
-          order_id: "987654", // Assuming you store Shiprocket order ID in the order model
-          order_date: new Date().toISOString().split('T')[0],
-          pickup_customer_name: "akshay", // Your registered pickup address ID
-          pickup_address: "416, Udyog Vihar III, Sector 20dress",
+          order_id: orderId, // Assuming you store Shiprocket order ID in the order model
+          order_date: order.createdAt,
+          pickup_customer_name: order.shippingAddress.fullName, // Your registered pickup address ID
+          pickup_address: `${order.shippingAddress.addressLine1}, ${order.shippingAddress.addressLine2}`,
           pickup_city: order.shippingAddress.city,
           pickup_state: order.shippingAddress.state,
           pickup_country: order.shippingAddress.country,
-          pickup_pincode: 679571,
-          pickup_email: "bijith@gmail.com",
+          pickup_pincode: parseInt(order.shippingAddress.zipCode),
+          pickup_email: order.user.email,
           pickup_phone: 8921359475,
-          shipping_customer_name: "Jane",
-          shipping_address: "Castle",
-          shipping_city: "Mumbai",
+          shipping_customer_name: order.vendor.ownername,
+          shipping_address: order.vendor.address,
+          shipping_city: order.vendor.city,
           shipping_country: "India",
-          shipping_pincode: 679503,
-          shipping_state: "Maharashtra",
+          shipping_pincode: parseInt(order.vendor.pincode),
+          shipping_state: order.vendor.state,
           shipping_phone: 9562100653,
-          order_items: [{
-              sku: 'TS-COT-BLK-M', // Product SKU
-              name: 'Cotton T-Shirt',
-              units: 1, // Assuming return of one unit
-              selling_price: 10
-          }],
+          order_items: orderItems,
           // Additional optional fields
           payment_method: 'Prepaid', // or as per your preference
           sub_total: 10,
