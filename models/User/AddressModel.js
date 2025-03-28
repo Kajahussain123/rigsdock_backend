@@ -7,7 +7,12 @@ const addressSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    fullName: {
+    firstName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    lastName: {
       type: String,
       required: true,
       trim: true,

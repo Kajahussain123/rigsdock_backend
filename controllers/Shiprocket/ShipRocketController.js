@@ -67,7 +67,11 @@ async function refreshShiprocketToken() {
 // 3. Create Order on Shiprocket - For each SubOrder
 async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId) {
   console.log('mainOrder',mainOrder);
-  console.log('subOrder:',subOrder)
+  console.log('subOrder.items:',subOrder.items)
+  console.log('subOrder.items.length:',subOrder.items[0].product.length)
+  console.log('subOrder.items.breadth:',subOrder.items[0].product.breadth)
+  console.log('subOrder.items.height:',subOrder.items[0].product.height)
+  console.log('subOrder.items.weight:',subOrder.items[0].product.weight)
   try {
     const token = await getShiprocketToken();
     
@@ -135,10 +139,10 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
       sub_total: mainOrder.totalAmount,
       
       // Required package dimensions
-      length: 10,
-      breadth: 10,
-      height: 5,
-      weight: 1.2
+      length: subOrder.items[0].product.length,
+      breadth: subOrder.items[0].product.breadth,
+      height: subOrder.items[0].product.height,
+      weight: subOrder.items[0].product.weight
     }
 
     console.log("Sending to Shiprocket:", JSON.stringify(orderData));

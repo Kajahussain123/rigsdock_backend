@@ -5,7 +5,7 @@ const fs = require('fs');
 
 //create a new product
 exports.createProduct = async (req, res) => {
-  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory,deliveryfee } = req.body;
+  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory,deliveryfee,length,breadth,height,weight } = req.body;
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "At least one product image is required" });
@@ -13,7 +13,7 @@ exports.createProduct = async (req, res) => {
 
     const imagePaths = req.files.images.map((file) => file.filename);
 
-    if (!name || !description || !price || !stock || !brand || !category || !maincategory) {
+    if (!name || !description || !price || !stock || !brand || !category || !maincategory || !length || !breadth || !height || !weight) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -36,6 +36,10 @@ exports.createProduct = async (req, res) => {
       ownerType: req.user.role,
       owner: req.user.id,
       attributes: new Map(Object.entries(attributes)),
+      length,
+      breadth,
+      height,
+      weight
     }
     if (subcategory && subcategory.trim().length > 0) {
       productData.subcategory = subcategory;
