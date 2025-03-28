@@ -67,7 +67,7 @@ async function refreshShiprocketToken() {
 // 3. Create Order on Shiprocket - For each SubOrder
 async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId) {
   console.log('mainOrder',mainOrder);
-  console.log('subOrder.items:',subOrder.items)
+  console.log('subOrder:',subOrder)
   console.log('subOrder.items.length:',subOrder.items[0].product.length)
   console.log('subOrder.items.breadth:',subOrder.items[0].product.breadth)
   console.log('subOrder.items.height:',subOrder.items[0].product.height)
@@ -91,7 +91,7 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
         name: product.name,
         sku: product.sku || product._id.toString(),
         units: item.quantity,
-        selling_price: subOrder.totalPrice,
+        selling_price: subOrder.items[0].price,
       });
       
       // Calculate total weight (assuming weight is in kg)
@@ -110,16 +110,16 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
       // Required fields
       order_id: subOrder._id,
       order_date: subOrder.createdAt,
-      pickup_location: "bijay",
-      billing_customer_name: user.name,
-      billing_last_name: "kk",
+      pickup_location: vendor.email,
+      billing_customer_name: address.firstName,
+      billing_last_name: address.lastName,
       billing_address: `${address.addressLine1},${address.addressLine2}`,
       billing_city: address.city,
       billing_pincode: parseInt(address.zipCode),
       billing_state: address.state,
       billing_country: address.country,
       billing_email: user.email,
-      billing_phone: parseInt(user.mobileNumber),
+      billing_phone: parseInt(address.phone),
       shipping_is_billing: true,
       
       // // Conditional required fields (since shipping_is_billing is false)
@@ -135,8 +135,8 @@ async function createShiprocketOrder(subOrder, mainOrder, shippingAddress, userI
       order_items: orderItems,
       
       // Required payment info
-      payment_method: subOrder.paymentMethod,
-      sub_total: mainOrder.totalAmount,
+      payment_method: "Prepaid",
+      sub_total: subOrder.items[0].price,
       
       // Required package dimensions
       length: subOrder.items[0].product.length,
@@ -254,6 +254,7 @@ async function cancelShiprocketOrder(shiprocketOrderId) {
 // Function to register return order with Shiprocket
 async function registerShiprocketReturnOrder(order, product) {
   console.log('order',order);
+  console.log('product',order.items[0].product);
   try {
       // Get Shiprocket authentication token (you'll need to implement token retrieval)
       const authToken = await getShiprocketToken();
@@ -275,29 +276,29 @@ async function registerShiprocketReturnOrder(order, product) {
       const returnOrderPayload = {
           order_id: orderId, // Assuming you store Shiprocket order ID in the order model
           order_date: order.createdAt,
-          pickup_customer_name: order.shippingAddress.fullName, // Your registered pickup address ID
+          pickup_customer_name: `${order.shippingAddress.firstName}${order.shippingAddress.lastName}`, // Your registered pickup address ID
           pickup_address: `${order.shippingAddress.addressLine1}, ${order.shippingAddress.addressLine2}`,
           pickup_city: order.shippingAddress.city,
           pickup_state: order.shippingAddress.state,
           pickup_country: order.shippingAddress.country,
           pickup_pincode: parseInt(order.shippingAddress.zipCode),
           pickup_email: order.user.email,
-          pickup_phone: 8921359475,
+          pickup_phone: parseInt(order.vendor.number),
           shipping_customer_name: order.vendor.ownername,
           shipping_address: order.vendor.address,
           shipping_city: order.vendor.city,
-          shipping_country: "India",
-          shipping_pincode: parseInt(order.vendor.pincode),
+          shipping_country: order.vendor.country,
+          shipping_pincode: order.vendor.pincode,
           shipping_state: order.vendor.state,
-          shipping_phone: 9562100653,
+          shipping_phone: parseInt(order.vendor.number),
           order_items: orderItems,
           // Additional optional fields
           payment_method: 'Prepaid', // or as per your preference
-          sub_total: 10,
-          length: 10,
-          breadth: 15,
-          height: 20,
-          weight: 1
+          sub_total: order.totalPrice,
+          length: order.items[0].product.length,
+          breadth: order.items[0].product.breadth,
+          height: order.items[0].product.height,
+          weight: order.items[0].product.weight
       };
 
       // Make API call to Shiprocket
