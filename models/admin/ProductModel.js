@@ -30,7 +30,11 @@ const productSchema = new mongoose.Schema(
     },
     // Only one immediate discount is applied: either an offer or a deal.
     offer: { type: mongoose.Schema.Types.ObjectId, ref: "Offer", default: null },
-    deal: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", default: null }
+    deal: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", default: null },
+    length: { type: Number, required: true },
+    breadth: { type: Number, required: true },
+    height: { type: Number, required: true },
+    weight: { type: Number, required: true },
   },
   { timestamps: true }
 );

@@ -98,7 +98,7 @@ exports.placeOrder = async (req, res) => {
         // Step 2: Create Shiprocket shipments for each sub-order
         const shiprocketResponses = [];
         for (const subOrderId of createdOrders) {
-            const subOrder = await Order.findById(subOrderId);
+            const subOrder = await Order.findById(subOrderId).populate('items.product');
 
             // Create Shiprocket order for each subOrder
             const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress,userId);
