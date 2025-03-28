@@ -3,7 +3,7 @@ const Address = require("../../models/User/AddressModel");
 // Add new address
 exports.addAddress = async (req, res) => {
     try {
-        const { userId, fullName, phone, addressLine1, addressLine2, city, state, zipCode, country, addressType, isDefault } = req.body;
+        const { userId, firstName,lastName, phone, addressLine1, addressLine2, city, state, zipCode, country, addressType, isDefault } = req.body;
 
         if (isDefault) {
             // Set all other addresses to not default
@@ -12,7 +12,8 @@ exports.addAddress = async (req, res) => {
 
         const newAddress = new Address({
             user: userId,
-            fullName,
+            firstName,
+            lastName,
             phone,
             addressLine1,
             addressLine2,
