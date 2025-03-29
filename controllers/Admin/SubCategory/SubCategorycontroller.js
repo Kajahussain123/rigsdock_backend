@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const SubCategory = require("../../../models/admin/SubCategoryModel");
 
 //create a new subcategory
@@ -23,10 +24,25 @@ exports.createSubCategory = async (req, res) => {
 // get all sub categories
 exports.getSubCategories = async (req, res) => {
   try {
-    const subCategories = await SubCategory.find().populate('category')
+    const subCategories = await SubCategory.find().populate('category');
+
+    const subCategoriesWithProductCount = await Promise.all(
+      subCategories.map(async (subCategory) => {
+        // Count products for this subcategory
+        const productCount = await mongoose.model('Product').countDocuments({
+          subcategory: subCategory._id
+        });
+        
+        // Convert to plain object and add productCount
+        const subCategoryObj = subCategory.toObject();
+        subCategoryObj.productCount = productCount;
+        
+        return subCategoryObj;
+      })
+    );
+
     res.status(200).json({
-      total: subCategories.length,
-      subCategories
+      subCategories: subCategoriesWithProductCount
     });
   } catch (err) {
     res
