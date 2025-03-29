@@ -1,5 +1,6 @@
 const Order = require('../../../models/User/OrderModel');
 const Product = require('../../../models/admin/ProductModel');
+const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 
 // get all order by vendor id
 exports.getAllOrders = async(req,res) => {
@@ -15,37 +16,49 @@ exports.getAllOrders = async(req,res) => {
     // Find all orders that contain these products
     const orders = await Order.find({ "items.product": { $in: productIds } })
       .populate("user", "name email")
-      .populate("items.product", "name price owner")
+      .populate({
+        path: 'items.product',
+        populate: {
+          path: 'owner',
+          model: 'Vendor' // Make sure this matches your ownerType model name
+        }
+      })
       .populate("shippingAddress");
     // console.log(orders);
 
-    const filteredOrders = orders
-    .map(order => {
-      console.log("Original Order Items:", order.items);
-      // Filter items to include only the vendor's products
-      order.items = order.items.filter(item => {
-        // Convert both IDs to strings for comparison
-        const itemProductIdString = item.product._id.toString();
-        const isVendorProduct = productIds.some(productId => productId.toString() === itemProductIdString);
-        console.log(`Item ${itemProductIdString} belongs to vendor: ${isVendorProduct}`);
-        return isVendorProduct;
-      });
-  
-      console.log("Filtered Order Items:", order.items);
-  
-      // Recalculate the total price based on the filtered items
-      order.totalPrice = order.items.reduce((total, item) => total + item.price * item.quantity, 0);
-  
-      return order;
-    })
-    // Remove orders that no longer have any items after filtering
-    .filter(order => {
-      console.log(`Order ${order._id} has items: ${order.items.length > 0}`);
-      return order.items.length > 0;
-    });
-    console.log(filteredOrders)
+    const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
+    const platformFee = platformFeeData?.amount || 0;
 
-    res.status(200).send(filteredOrders);
+    const processedOrders = orders
+            .map(order => {
+                // Filter items to include only vendor's products
+                const filteredItems = order.items.filter(item => 
+                    productIds.some(id => id.toString() === item.product._id.toString())
+                );
+
+                // Calculate order totals
+                const itemsTotal = filteredItems.reduce(
+                    (total, item) => total + (item.price * item.quantity), 0
+                );
+                const finalTotal = itemsTotal + platformFee;
+
+                return {
+                    ...order.toObject(),
+                    items: filteredItems,
+                    itemsTotal,
+                    platformFee,
+                    finalTotalPrice: finalTotal
+                };
+            })
+            // Remove orders with no items after filtering
+            .filter(order => order.items.length > 0);
+
+        res.status(200).json({ 
+            message: "Orders fetched successfully",
+            total: processedOrders.length,
+            platformFee,
+            orders: processedOrders
+        });
   } catch (error) {
     console.error(error);
     res.status(500).send({ error: "An error occurred while fetching orders." });
