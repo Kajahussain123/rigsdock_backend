@@ -1,6 +1,7 @@
 const Category = require('../../models/admin/categoryModel');
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 
 exports.createCategory = async (req, res) => {
     const { name, description, status, maincategory } = req.body;
@@ -29,9 +30,24 @@ exports.createCategory = async (req, res) => {
 exports.getCategories = async (req, res) => {
     try {
         const categories = await Category.find().populate('maincategory');
+
+        const categoriesWithSubCount = await Promise.all(
+            categories.map(async (category) => {
+                // Count subcategories for this category
+                const subCategoryCount = await mongoose.model('SubCategory').countDocuments({
+                    category: category._id
+                });
+                
+                // Convert to plain object and add subCategoryCount
+                const categoryObj = category.toObject();
+                categoryObj.subCategoryCount = subCategoryCount;
+                
+                return categoryObj;
+            })
+        );
+
         res.status(200).json({
-            total: categories.length,
-            categories
+            categories: categoriesWithSubCount
         });
     } catch (err) {
         res.status(500).json({ message: 'Error fetching categories', error: err.message });
