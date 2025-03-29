@@ -34,4 +34,7 @@ router.delete("/:productId/attributes-delete",verifyToken(['Vendor']),productCon
 // // Bulk product upload
 // router.post("/bulk-upload",verifyToken(['Vendor']),upload,productController.productBulkUpload)
 
+// Bulk product upload
+router.delete("/bulk-delete",verifyToken(['Vendor']),productController.bulkDeleteProduct);
+
 module.exports = router;
