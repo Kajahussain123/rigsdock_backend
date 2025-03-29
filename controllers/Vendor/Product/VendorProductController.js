@@ -309,3 +309,63 @@ exports.deleteAttribute = async (req,res) => {
 //     res.status(500).json({ message: "Internal Server Error", error: error.message });
 //   }
 // }
+
+// bulk delete product
+exports.bulkDeleteProduct = async (req, res) => {
+  try {
+    // 1. Get vendor ID from authenticated user
+    const vendorId = req.user.id; // or req.user._id depending on your auth setup
+    console.log('vendorId:',vendorId)
+    
+    // 2. Validate product IDs
+    const { productIds } = req.body;
+    console.log('productIds:',productIds);
+
+    if (!productIds || !Array.isArray(productIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide an array of product IDs to delete"
+      });
+    }
+
+    // 4. Check product ownership and existence
+    const existingProducts = await Product.find({
+      _id: { $in: productIds },
+      owner: vendorId,
+      ownerType: 'Vendor' // Ensure ownerType is Vendor
+    });
+
+    if (existingProducts.length !== productIds.length) {
+      const invalidProducts = productIds.filter(id => 
+        !existingProducts.some(p => p._id.toString() === id)
+      );
+      
+      return res.status(403).json({
+        success: false,
+        message: "Some products don't belong to you or don't exist",
+        invalidProducts
+      });
+    }
+
+    // 5. Perform deletion
+    const deleteResult = await Product.deleteMany({
+      _id: { $in: productIds },
+      owner: vendorId
+    });
+
+    // 7. Success response
+    res.status(200).json({
+      success: true,
+      message: `${deleteResult.deletedCount} products deleted successfully`,
+      deletedCount: deleteResult.deletedCount
+    });
+
+  } catch (error) {
+    console.error("Error deleting products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+};
