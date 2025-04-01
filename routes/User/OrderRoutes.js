@@ -14,4 +14,6 @@ router.get("/:orderId", orderController.getOrderById);
 // Update order status
 router.patch("/:orderId", orderController.updateOrderStatus);
 
+router.get("/:orderId/invoice", orderController.generateInvoice);
+
 module.exports = router;

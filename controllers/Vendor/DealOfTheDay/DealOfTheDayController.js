@@ -14,6 +14,7 @@ exports.addDealOfTheDay = async(req,res) => {
         if(!product) {
             return res.status(404).json({ message: "Product not found" })
         }
+        console.log('product:',product)
 
         // // Check if the product already has a deal
         // const existingDeal = await DealOfTheDay.findOne({ product: productId });
@@ -22,7 +23,7 @@ exports.addDealOfTheDay = async(req,res) => {
         // }
 
         // Update the product's finalPrice
-        product.finalPrice = offerPrice;
+        product.finalPrice = product.finalPrice - offerPrice;
         await product.save();
 
         // Create a new deal
