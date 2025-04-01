@@ -23,7 +23,7 @@ exports.addDealOfTheDay = async(req,res) => {
         // }
 
         // Update the product's finalPrice
-        product.finalPrice = product.finalPrice - offerPrice;
+        product.finalPrice = offerPrice;
         await product.save();
 
         // Create a new deal
