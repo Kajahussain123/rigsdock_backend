@@ -58,7 +58,13 @@ exports.updateOrderStatus = async(req,res) => {
 exports.getOrderById = async(req,res) => {
     try {
         const { orderId } = req.params;
-        const order = await Order.findById(orderId).populate('user shippingAddress').populate("items.product", "name");;
+        const order = await Order.findById(orderId).populate('user shippingAddress').populate({
+            path: 'items.product',
+            populate: {
+              path: 'owner',
+              model: 'Vendor'
+            }
+          })
         if(!order) {
             return res.status(404).json({ message: "order not found" });
         }
