@@ -73,7 +73,13 @@ exports.getOrderById = async (req, res) => {
     // Find the order by ID
     const order = await Order.findById(orderId)
       .populate("user", "name email")
-      .populate("items.product", "name price owner")
+      .populate({
+        path: 'items.product',
+        populate: {
+          path: 'owner',
+          model: 'Vendor'
+        }
+      })
       .populate("shippingAddress");
 
     if (!order) {
