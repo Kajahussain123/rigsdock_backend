@@ -22,6 +22,10 @@ const categorySchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'MainCategory',
         required: true,
+    },
+    commissionPercentage: {
+        type: Number,
+        default: 0, // or whatever makes sense as default
     }
 }, { timestamps: true });
 
