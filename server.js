@@ -4,11 +4,27 @@ const cors = require("cors");
 require("./config/db");
 const path = require("path");
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: [
+    'http://localhost:3000', 
+    'https://rigsdock.com',
+    'https://vermillion-beijinho-abb79a.netlify.app'
+  ],
+  methods: ['GET','HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 const socketIo = require('socket.io');
 const http = require('http');
-
+app.options("*", cors());  // Allow preflight requests
+app.use((req, res, next) => {
+  if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
+    return next();  // Skip JSON parsing for file uploads
+  }
+  next();
+});
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
@@ -96,68 +112,68 @@ app.use("/token", tokenRefresh);
 
 
 // Admin Routes
-app.use("/admin/auth", adminAuth);
-app.use("/admin/subcategory", SubcategoryRoutes);
-app.use("/admin/product", ProductRoutes);
-app.use("/admin/category", CategoryRoutes);
-app.use("/admin/maincategory", MainCategoryRouter);
-app.use("/admin/notification", NotificationRouter);
-app.use("/admin/carousel", carouselRouter);
-app.use("/admin/vendor", adminVendorRoute);
-app.use('/admin/offer', OfferRouter);
-app.use('/admin/coupon', couponRouter);
-app.use('/admin/deal', DealRouter);
-app.use('/admin/order', adminOrder);
-app.use('/admin/invoice', adminInvoice);
-app.use('/admin/user', adminUser);
-app.use('/admin/platform', platFormFee);  // ✅ Added from 'kaja' branch
-app.use('/admin/dashboard', adminDashboard);
-app.use('/admin/financial', adminFinancial);
-app.use('/admin/vendorpayout', adminVendorpayout);
-app.use('/admin/analytics', adminAnalytics);
-app.use('/admin/review', adminReviews);
-app.use('/admin/chat',adminChat)
-app.use('/admin/shiprocket',adminShiprocket)
+app.use("/api/admin/auth", adminAuth);
+app.use("/api/admin/subcategory", SubcategoryRoutes);
+app.use("/api/admin/product", ProductRoutes);
+app.use("/api/admin/category", CategoryRoutes);
+app.use("/api/admin/maincategory", MainCategoryRouter);
+app.use("/api/admin/notification", NotificationRouter);
+app.use("/api/admin/carousel", carouselRouter);
+app.use("/api/admin/vendor", adminVendorRoute);
+app.use('/api/admin/offer', OfferRouter);
+app.use('/api/admin/coupon', couponRouter);
+app.use('/api/admin/deal', DealRouter);
+app.use('/api/admin/order', adminOrder);
+app.use('/api/admin/invoice', adminInvoice);
+app.use('/api/admin/user', adminUser);
+app.use('/api/admin/platform', platFormFee);  // ✅ Added from 'kaja' branch
+app.use('/api/admin/dashboard', adminDashboard);
+app.use('/api/admin/financial', adminFinancial);
+app.use('/api/admin/vendorpayout', adminVendorpayout);
+app.use('/api/admin/analytics', adminAnalytics);
+app.use('/api/admin/review', adminReviews);
+app.use('/api/admin/chat',adminChat)
+app.use('/api/admin/shiprocket',adminShiprocket)
 
 
 
 // Vendor Routes
-app.use("/vendor/auth", vendorAuth);
-app.use("/vendor/maincategory", vendorMaincategory);
-app.use("/vendor/category", vendorCategory);
-app.use("/vendor/subcategory", vendorSubcategory);
-app.use("/vendor/profile", vendorProfile);
-app.use("/vendor/notification", vendorNotification);
-app.use("/vendor/product", vendorProduct);
-app.use("/vendor/carousel", vendorCarousel);
-app.use("/vendor/offer", vendorOffer);
-app.use("/vendor/coupon", vendorCoupon);
-app.use("/vendor/dealoftheday", vendorDealOfTheDay);
-app.use("/vendor/dashboard", vendorDashboard);
-app.use("/vendor/order", vendorOrder);
-app.use("/vendor/analytics", vendorAnalytics);
-app.use("/vendor/review", vendorReview);
-app.use("/vendor/insights", vendorInsights);
-app.use("/vendor/chat", vendorChat);
-app.use("/vendor/shiprocket", vendorShiprocket);
+app.use("/api/vendor/auth", vendorAuth);
+app.use("/api/vendor/maincategory", vendorMaincategory);
+app.use("/api/vendor/category", vendorCategory);
+app.use("/api/vendor/subcategory", vendorSubcategory);
+app.use("/api/vendor/profile", vendorProfile);
+app.use("/api/vendor/notification", vendorNotification);
+app.use("/api/vendor/product", vendorProduct);
+app.use("/api/vendor/carousel", vendorCarousel);
+app.use("/api/vendor/offer", vendorOffer);
+app.use("/api/vendor/coupon", vendorCoupon);
+app.use("/api/vendor/dealoftheday", vendorDealOfTheDay);
+app.use("/api/vendor/dashboard", vendorDashboard);
+app.use("/api/vendor/order", vendorOrder);
+app.use("/api/vendor/analytics", vendorAnalytics);
+app.use("/api/vendor/review", vendorReview);
+app.use("/api/vendor/insights", vendorInsights);
+app.use("/api/vendor/chat", vendorChat);
+app.use("/api/vendor/shiprocket", vendorShiprocket);
 
 
 // User Routes
-app.use("/user/auth", userAuth);
-app.use("/user/maincategory", userMainCategoryRoutes);
-app.use("/user/category", userCategoryRoutes);
-app.use("/user/subcategory", userSubCategoryRoutes);
-app.use("/user/product", userProductRoutes);
-app.use("/user/wishlist", wishlistRoutes);
-app.use("/user/cart", cartRoutes);
-app.use("/user/address", addressRoutes);
-app.use("/user/checkout", checkoutRoutes);
-app.use("/user/order",orderRoutes)
-app.use("/user/reviews",userReviewsRoutes)
-app.use("/user/complaint",complaintsRoutes)
-app.use("/user/dealoftheday",dealofthedayUserRoutes)
-app.use("/user/vendor",vendorUserRoutes)
-app.use("/user/shiprocket",userShiprocket);
+app.use("/api/user/auth", userAuth);
+app.use("/api/user/maincategory", userMainCategoryRoutes);
+app.use("/api/user/category", userCategoryRoutes);
+app.use("/api/user/subcategory", userSubCategoryRoutes);
+app.use("/api/user/product", userProductRoutes);
+app.use("/api/user/wishlist", wishlistRoutes);
+app.use("/api/user/cart", cartRoutes);
+app.use("/api/user/address", addressRoutes);
+app.use("/api/user/checkout", checkoutRoutes);
+app.use("/api/user/order",orderRoutes)
+app.use("/api/user/reviews",userReviewsRoutes)
+app.use("/api/user/complaint",complaintsRoutes)
+app.use("/api/user/dealoftheday",dealofthedayUserRoutes)
+app.use("/api/user/vendor",vendorUserRoutes)
+app.use("/api/user/shiprocket",userShiprocket);
 
 
 // Serve uploaded files

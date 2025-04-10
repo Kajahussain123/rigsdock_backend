@@ -16,4 +16,10 @@ router.patch("/:orderId", orderController.updateOrderStatus);
 
 router.get("/:orderId/invoice", orderController.generateInvoice);
 
+router.post('/phonepe-webhook', orderController.phonepeWebhook);
+
+// Check payment status
+router.get('/payment-status/:orderId', orderController.checkPaymentStatus);
+
+
 module.exports = router;

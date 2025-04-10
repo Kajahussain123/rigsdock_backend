@@ -24,6 +24,7 @@
     "multer-gridfs-storage": "^5.0.2",
     "node-cron": "^3.0.3",
     "pdfkit": "^0.16.0",
+    "pg-sdk-node": "https://phonepe.mycloudrepo.io/public/repositories/phonepe-pg-sdk-node/releases/v2/phonepe-pg-sdk-node.tgz",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5"

@@ -2,7 +2,7 @@ const Cart = require("../../models/User/CartModel");
 const Product = require("../../models/admin/ProductModel");
 const Coupon = require('../../models/admin/couponModel')
 const Order = require('../../models/User/OrderModel')
-const PlatformFee = require("../../models/admin/PlatformFeeModel"); 
+const PlatformFee = require("../../models/admin/PlatformFeeModel");
 
 // Add product to cart
 exports.addToCart = async (req, res) => {
@@ -41,8 +41,8 @@ exports.addToCart = async (req, res) => {
         const feeConfig = await PlatformFee.findOne();
         let platformFee = 0;
         if (feeConfig) {
-            platformFee = feeConfig.feeType === "fixed" 
-                ? feeConfig.amount 
+            platformFee = feeConfig.feeType === "fixed"
+                ? feeConfig.amount
                 : (feeConfig.amount / 100) * cart.totalPrice;
         }
 
@@ -73,8 +73,8 @@ exports.getCart = async (req, res) => {
             let platformFee = 0;
 
             if (feeConfig) {
-                platformFee = feeConfig.feeType === "fixed" 
-                    ? feeConfig.amount 
+                platformFee = feeConfig.feeType === "fixed"
+                    ? feeConfig.amount
                     : (feeConfig.amount / 100) * cart.totalPrice;
             }
 
@@ -149,6 +149,12 @@ exports.applyCoupon = async (req, res) => {
         if (!cart || cart.items.length === 0) {
             return res.status(400).json({ message: "Cart is empty" });
         }
+
+        // Check if a coupon has already been applied
+        if (cart.coupon && cart.coupon.code === couponCode) {
+            return res.status(400).json({ message: "Coupon already applied" });
+        }
+
 
         // Find the coupon
         const coupon = await Coupon.findOne({ couponCode });
@@ -290,8 +296,8 @@ exports.updateCartQuantity = async (req, res) => {
         }
 
         // ✅ Ensure cart.items is not empty before calculating totalPrice
-        cart.totalPrice = cart.items.length > 0 
-            ? cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) 
+        cart.totalPrice = cart.items.length > 0
+            ? cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
             : 0;
 
         // ✅ Fetch platform fee config
