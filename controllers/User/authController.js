@@ -2,7 +2,7 @@ const User = require('../../models/User/AuthModel');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 
-const TWO_FACTOR_API_KEY = '411421e5-c758-11ef-8b17-0200cd936042'; // Replace with your 2Factor API key
+const TWO_FACTOR_API_KEY = 'ff7f43b4-15dc-11f0-8b17-0200cd936042'; // Replace with your 2Factor API key
 
 // Send OTP to mobile number
 const sendOTP = async (req, res) => {
