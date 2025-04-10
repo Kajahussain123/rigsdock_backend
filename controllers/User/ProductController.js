@@ -40,16 +40,24 @@ exports.getProducts = async (req, res) => {
 };
 
 
-// Get products by main category ID, category ID, and subcategory ID
 exports.getProductsByCategoryHierarchy = async (req, res) => {
   try {
     const { mainCategoryId, categoryId, subCategoryId } = req.params;
 
-    const products = await Product.find({
+    const query = {
       maincategory: mainCategoryId,
-      category: categoryId,
-      subcategory: subCategoryId
-    }).populate('maincategory').populate('category').populate('subcategory');
+      category: categoryId
+    };
+
+    // Only include subcategory in query if it's not "null" or undefined
+    if (subCategoryId && subCategoryId !== "null") {
+      query.subcategory = subCategoryId;
+    }
+
+    const products = await Product.find(query)
+      .populate('maincategory')
+      .populate('category')
+      .populate('subcategory');
 
     if (products.length === 0) {
       return res.status(404).json({ message: "No products found for the given category hierarchy" });
@@ -60,6 +68,7 @@ exports.getProductsByCategoryHierarchy = async (req, res) => {
     res.status(500).json({ message: "Error fetching products", error: error.message });
   }
 };
+
 
 exports.getProductById = async (req, res) => {
   try {

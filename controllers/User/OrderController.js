@@ -2,146 +2,392 @@ const Order = require("../../models/User/OrderModel");
 const Cart = require("../../models/User/CartModel");
 const Address = require("../../models/User/AddressModel");
 const MainOrder = require("../../models/User/MainOrderModel");
+const axios = require("axios");
+const mongoose = require("mongoose");
+const crypto = require('crypto');
+const PlatformFee = require("../../models/admin/PlatformFeeModel");
+const Vendor = require("../../models/Vendor/vendorModel");
+const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = require('pg-sdk-node');
+const { randomUUID } = require('crypto');
 const { createShiprocketOrder } = require('../../controllers/Shiprocket/ShipRocketController');
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 const qrcode = require("qrcode");
 
-// Place an order (POST method)
+
+const PHONEPE_CLIENT_ID = process.env.PHONEPE_CLIENT_ID;
+const PHONEPE_CLIENT_SECRET = process.env.PHONEPE_CLIENT_SECRET;
+const PHONEPE_CLIENT_VERSION = 1;
+const PHONEPE_ENV = process.env.NODE_ENV === 'production' ? Env.PRODUCTION : Env.SANDBOX;
+const PHONEPE_CALLBACK_USERNAME = process.env.PHONEPE_CALLBACK_USERNAME;
+const PHONEPE_CALLBACK_PASSWORD = process.env.PHONEPE_CALLBACK_PASSWORD;
+
+const phonePeClient = StandardCheckoutClient.getInstance(
+    PHONEPE_CLIENT_ID,
+    PHONEPE_CLIENT_SECRET,
+    PHONEPE_CLIENT_VERSION,
+    PHONEPE_ENV
+);
+
 exports.placeOrder = async (req, res) => {
+  try {
+      const { userId, shippingAddressId, paymentMethod } = req.body;
+
+      // Fetch user's cart
+      const cart = await Cart.findOne({ user: userId }).populate("items.product");
+
+      if (!cart || cart.items.length === 0) {
+          return res.status(400).json({ message: "Cart is empty" });
+      }
+
+      // Validate shipping address
+      const shippingAddress = await Address.findById(shippingAddressId);
+      if (!shippingAddress) {
+          return res.status(400).json({ message: "Invalid shipping address" });
+      }
+
+      // Validate payment method
+      const validPaymentMethods = ["COD", "PhonePe", "Credit Card", "Debit Card", "UPI"];
+      if (!validPaymentMethods.includes(paymentMethod)) {
+          return res.status(400).json({ message: "Invalid payment method" });
+      }
+
+      // Group items by vendor
+      const vendorOrders = {};
+      let totalAmount = 0;
+
+      cart.items.forEach(item => {
+          const vendorId = item.product.owner ? item.product.owner.toString() : null;
+          if (!vendorId) {
+              console.error("Error: Product missing owner field", item.product);
+              return;
+          }
+
+          if (!vendorOrders[vendorId]) {
+              vendorOrders[vendorId] = { vendor: vendorId, items: [], totalPrice: 0 };
+          }
+
+          vendorOrders[vendorId].items.push({
+              product: item.product._id,
+              quantity: item.quantity,
+              price: item.price,
+          });
+
+          vendorOrders[vendorId].totalPrice += item.price * item.quantity;
+          totalAmount += item.price * item.quantity;
+      });
+
+      // Create Main Order
+      const mainOrder = new MainOrder({
+          user: userId,
+          totalAmount,
+          paymentMethod,
+          paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
+          orderStatus: "Processing",
+          shippingAddress: shippingAddressId,
+          subOrders: [],
+      });
+
+      await mainOrder.save();
+
+      // Create vendor orders
+      const createdOrders = [];
+      for (const vendorId in vendorOrders) {
+          const orderData = vendorOrders[vendorId];
+
+          const newOrder = new Order({
+              mainOrderId: mainOrder._id,
+              user: userId,
+              vendor: vendorId,
+              items: orderData.items,
+              totalPrice: orderData.totalPrice,
+              paymentMethod,
+              paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
+              orderStatus: "Processing",
+              shippingAddress: shippingAddressId,
+          });
+
+          await newOrder.save();
+          createdOrders.push(newOrder._id);
+      }
+
+      // Update Main Order with subOrders
+      mainOrder.subOrders = createdOrders;
+      await mainOrder.save();
+
+      // Create Shiprocket shipments for each sub-order
+      const shiprocketResponses = [];
+      for (const subOrderId of createdOrders) {
+          const subOrder = await Order.findById(subOrderId).populate('items.product');
+
+          // Create Shiprocket order for each subOrder
+          const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
+
+          // Save Shiprocket IDs to the subOrder
+          subOrder.shiprocketOrderId = response.order_id;
+          subOrder.shiprocketShipmentId = response.shipment_id;
+          await subOrder.save();
+
+          shiprocketResponses.push(response);
+      }
+
+      // Prepare response data based on payment method
+      let responseData;
+
+      if (paymentMethod === "COD") {
+          await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
+          responseData = {
+              message: "Order placed successfully with Cash on Delivery",
+              mainOrderId: mainOrder._id,
+              orders: createdOrders,
+              shiprocketResponses,
+          };
+      } 
+      else if (paymentMethod === "PhonePe") {
+          const merchantTransactionId = randomUUID();
+          const amountInPaisa = totalAmount * 100;
+          const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?order_id=${mainOrder._id}`;
+
+          const metaInfo = {
+              udf1: "order",
+              udf2: userId
+          };
+
+          const payRequest = StandardCheckoutPayRequest.builder()
+              .merchantOrderId(merchantTransactionId)
+              .amount(amountInPaisa)
+              .redirectUrl(redirectUrl)
+              .metaInfo(metaInfo)
+              .build();
+
+          const phonepeResponse = await phonePeClient.pay(payRequest);
+          
+          mainOrder.phonepeTransactionId = merchantTransactionId;
+          await mainOrder.save();
+
+          responseData = {
+              message: "Proceed to PhonePe Payment",
+              paymentUrl: phonepeResponse.redirectUrl,
+              mainOrderId: mainOrder._id,
+              orders: createdOrders,
+              phonepeTransactionId: merchantTransactionId,
+              shiprocketResponses,
+          };
+      } 
+      else {
+          responseData = {
+              message: "Payment method not implemented yet",
+              mainOrderId: mainOrder._id,
+              orders: createdOrders,
+              shiprocketResponses,
+          };
+      }
+
+      // Send a single response at the end
+      res.status(201).json(responseData);
+
+  } catch (error) {
+      console.error("Error placing order:", error);
+      if (!res.headersSent) {
+          res.status(500).json({ 
+              message: "Error placing order", 
+              error: error.message,
+              stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          });
+      }
+  }
+};
+// PhonePe Webhook Handler
+exports.phonepeWebhook = async (req, res) => {
     try {
-        const { userId, shippingAddressId, paymentMethod } = req.body;
+        const authorizationHeader = req.headers.authorization;
+        const callbackBody = JSON.stringify(req.body);
 
-        // Fetch user's cart with product details
-        const cart = await Cart.findOne({ user: userId }).populate("items.product");
-
-        if (!cart || cart.items.length === 0) {
-            return res.status(400).json({ message: "Cart is empty" });
+        if (!authorizationHeader) {
+            return res.status(401).json({ message: "Authorization header missing" });
         }
 
-        // Validate shipping address
-        const shippingAddress = await Address.findById(shippingAddressId);
-        if (!shippingAddress) {
-            return res.status(400).json({ message: "Invalid shipping address" });
-        }
+        try {
+            // Validate the callback
+            const callbackResponse = phonePeClient.validateCallback(
+                PHONEPE_CALLBACK_USERNAME,
+                PHONEPE_CALLBACK_PASSWORD,
+                authorizationHeader,
+                callbackBody
+            );
 
-        // Validate payment method
-        const validPaymentMethods = ["COD", "Credit Card", "Debit Card", "UPI", "Net Banking"];
-        if (!validPaymentMethods.includes(paymentMethod)) {
-            return res.status(400).json({ message: "Invalid payment method" });
-        }
+            // Extract order information
+            const merchantOrderId = callbackResponse.payload.orderId; // This is your MT_orderId format
+            const state = callbackResponse.payload.state;
 
-        // Group items by vendor (using owner field)
-        const vendorOrders = {};
-        let totalAmount = 0;
+            // The orderId is in format MT_xxx, so extract the actual order ID
+            const mainOrderId = merchantOrderId.replace('MT_', '');
 
-        cart.items.forEach(item => {
-            const vendorId = item.product.owner ? item.product.owner.toString() : null;
-            if (!vendorId) {
-                console.error("Error: Product missing owner field", item.product);
-                return; // Skip products without an owner
+            // Update order status based on the callback state
+            if (state === 'checkout.order.completed') {
+                // Payment successful
+                await MainOrder.findByIdAndUpdate(mainOrderId, {
+                    paymentStatus: 'Completed',
+                    orderStatus: 'Confirmed'
+                });
+
+                // Update all sub-orders
+                await Order.updateMany(
+                    { mainOrderId: mainOrderId },
+                    {
+                        paymentStatus: 'Completed',
+                        orderStatus: 'Confirmed'
+                    }
+                );
+
+                // Clear the cart
+                const mainOrder = await MainOrder.findById(mainOrderId);
+                if (mainOrder) {
+                    await Cart.findOneAndUpdate(
+                        { user: mainOrder.user },
+                        { items: [], totalPrice: 0, coupon: null }
+                    );
+                }
+            } else if (state === 'checkout.order.failed' || state === 'checkout.transaction.attempt.failed') {
+                // Payment failed
+                await MainOrder.findByIdAndUpdate(mainOrderId, {
+                    paymentStatus: 'Failed',
+                    orderStatus: 'Failed'
+                });
+
+                await Order.updateMany(
+                    { mainOrderId: mainOrderId },
+                    {
+                        paymentStatus: 'Failed',
+                        orderStatus: 'Failed'
+                    }
+                );
             }
 
-            if (!vendorOrders[vendorId]) {
-                vendorOrders[vendorId] = {
-                    vendor: vendorId,
-                    items: [],
-                    totalPrice: 0,
-                };
-            }
-            vendorOrders[vendorId].items.push({
-                product: item.product._id,
-                quantity: item.quantity,
-                price: item.price,
-            });
-            vendorOrders[vendorId].totalPrice += item.price * item.quantity;
-            totalAmount += item.price * item.quantity;
-        });
+            // Send acknowledgement response
+            return res.status(200).json({ status: "Success" });
 
-        // Create Main Order
-        const mainOrder = new MainOrder({
-            user: userId,
-            totalAmount,
-            paymentMethod,
-            paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
-            orderStatus: "Processing",
-            shippingAddress: shippingAddressId,
-            subOrders: [], // Will be updated later
-        });
-
-        await mainOrder.save();
-
-        // Create vendor orders and link to main order
-        const createdOrders = [];
-        for (const vendorId in vendorOrders) {
-            const orderData = vendorOrders[vendorId];
-
-            const newOrder = new Order({
-                mainOrderId: mainOrder._id, // Link to Main Order
-                user: userId,
-                vendor: vendorId,
-                items: orderData.items,
-                totalPrice: orderData.totalPrice,
-                paymentMethod,
-                paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
-                orderStatus: "Processing",
-                shippingAddress: shippingAddressId,
-            });
-
-            await newOrder.save();
-            createdOrders.push(newOrder._id);
+        } catch (validationError) {
+            console.error("PhonePe callback validation error:", validationError);
+            return res.status(401).json({ message: "Invalid callback" });
         }
-
-        // Update Main Order with subOrders
-        mainOrder.subOrders = createdOrders;
-        await mainOrder.save();
-
-        // Clear the cart after placing the order
-        await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
-
-        // Step 2: Create Shiprocket shipments for each sub-order
-        const shiprocketResponses = [];
-        for (const subOrderId of createdOrders) {
-            const subOrder = await Order.findById(subOrderId).populate('items.product');
-
-            // Create Shiprocket order for each subOrder
-            const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress,userId);
-
-            // Save Shiprocket IDs to the subOrder
-            subOrder.shiprocketOrderId = response.order_id;
-            subOrder.shiprocketShipmentId = response.shipment_id;
-            await subOrder.save();
-            console.log("subOrder",subOrder);
-
-            shiprocketResponses.push(response);
-        }
-
-        res.status(201).json({
-            message: "Orders placed and Shiprocket shipments created successfully",
-            mainOrderId: mainOrder._id,
-            orders: createdOrders,
-            shiprocketResponses,
-        });
     } catch (error) {
-        console.error("Error placing order:", error);
-        res.status(500).json({ message: "Error placing order", error: error.message });
+        console.error("PhonePe webhook error:", error);
+        return res.status(500).json({ message: "Error processing webhook", error: error.message });
+    }
+};
+
+// Check payment status endpoint
+exports.checkPaymentStatus = async (req, res) => {
+    try {
+        const { orderId } = req.params;
+
+        if (!orderId) {
+            return res.status(400).json({ message: "Order ID is required" });
+        }
+
+        const mainOrder = await MainOrder.findById(orderId);
+
+        if (!mainOrder) {
+            return res.status(404).json({ message: "Order not found" });
+        }
+
+        if (mainOrder.phonepeTransactionId) {
+            try {
+                const statusResponse = await phonePeClient.getOrderStatus(mainOrder.phonepeTransactionId);
+                const phonepeStatus = statusResponse.state;
+        
+                // ✅ Update the order in DB if needed
+                if (phonepeStatus === "COMPLETED" && mainOrder.paymentStatus !== "Completed") {
+                    await MainOrder.findByIdAndUpdate(orderId, {
+                        paymentStatus: "Completed",
+                        orderStatus: "Confirmed"
+                    });
+        
+                    await Order.updateMany(
+                        { mainOrderId: orderId },
+                        {
+                            paymentStatus: "Completed",
+                            orderStatus: "Confirmed"
+                        }
+                    );
+        
+                    // Clear the cart
+                    await Cart.findOneAndUpdate(
+                        { user: mainOrder.user },
+                        { items: [], totalPrice: 0, coupon: null }
+                    );
+                }
+        
+                if (
+                    (phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
+                    mainOrder.paymentStatus !== "Failed"
+                ) {
+                    await MainOrder.findByIdAndUpdate(orderId, {
+                        paymentStatus: "Failed",
+                        orderStatus: "Failed"
+                    });
+        
+                    await Order.updateMany(
+                        { mainOrderId: orderId },
+                        {
+                            paymentStatus: "Failed",
+                            orderStatus: "Failed"
+                        }
+                    );
+                }
+        
+                return res.status(200).json({
+                    orderId: mainOrder._id,
+                    paymentStatus: phonepeStatus === "COMPLETED" ? "Completed" : mainOrder.paymentStatus,
+                    orderStatus: phonepeStatus === "COMPLETED" ? "Confirmed" : mainOrder.orderStatus,
+                    phonepeStatus
+                });
+            } catch (phonepeError) {
+                console.error("Error getting PhonePe status:", phonepeError);
+                return res.status(200).json({
+                    orderId: mainOrder._id,
+                    paymentStatus: mainOrder.paymentStatus,
+                    orderStatus: mainOrder.orderStatus,
+                    phonepeStatus: "Error fetching status"
+                });
+            }
+        }
+        
+    } catch (error) {
+        console.error("Error checking payment status:", error);
+        res.status(500).json({ message: "Error checking payment status", error: error.message });
     }
 };
 
 
 
-// Get all orders for a user (GET method)
 exports.getUserOrders = async (req, res) => {
     try {
         const { userId } = req.params;
 
+        // Fetch platform fee (assuming there's only one active fee)
+        const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 }); // Get latest fee
+        const platformFee = platformFeeData?.amount || 0; // Default to 0 if not found
+
+        // Fetch user orders
         const orders = await Order.find({ user: userId })
             .populate("items.product")
             .populate("shippingAddress")
             .sort({ createdAt: -1 });
 
-        res.status(200).json({ orders });
+        // Calculate final price for each order
+        const ordersWithPlatformFee = orders.map(order => {
+            const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
+            return {
+                ...order.toObject(), // Convert Mongoose document to plain object
+                platformFee,
+                finalTotalPrice: finalTotal
+            };
+        });
+
+        res.status(200).json({ orders: ordersWithPlatformFee });
     } catch (error) {
         res.status(500).json({ message: "Error fetching orders", error: error.message });
     }

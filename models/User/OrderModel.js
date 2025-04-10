@@ -33,25 +33,55 @@ const orderSchema = new mongoose.Schema(
           type: Number,
           required: true,
         },
+        // category: {
+        //   type: mongoose.Schema.Types.ObjectId,
+        //   ref: "Category",
+        //   required: true,
+        // },
       },
     ],
     totalPrice: {
       type: Number,
       required: true,
     },
+    // commissionRate: {
+    //   type: Number, // Commission percentage stored from category
+    //   required: true,
+    // },
+    // commissionAmount: {
+    //   type: Number, // Amount deducted from vendor earnings
+    //   required: true,
+    // },
+    // vendorEarnings: {
+    //   type: Number, // Earnings after commission deduction
+    //   required: true,
+    // },
+    // payoutStatus: {
+    //   type: String,
+    //   enum: ["Pending", "Completed", "Failed"],
+    //   default: "Pending",
+    // },
     paymentMethod: {
       type: String,
-      enum: ["COD", "Credit Card", "Debit Card", "UPI", "Net Banking"],
+      enum: ["COD", "Credit Card", "Debit Card", "PhonePe", "Net Banking"],
       required: true,
     },
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Paid", "Failed"],
+      enum: ["Pending", "Paid", "Failed", "Processing"], 
       default: "Pending",
+  },
+  phonepeTransactionId : {
+      type: String, // Stores the Cashfree transaction ID
+      default: null,
+    },
+    phonePeOrderId: {
+      type: String,  // Stores the Cashfree order ID reference
+      default: null,
     },
     orderStatus: {
       type: String,
-      enum: ["Processing", "Shipped", "Delivered", "Cancelled", "Return"],
+      enum: ["Processing", "Shipped", "Delivered", "Cancelled"],
       default: "Processing",
     },
     shippingAddress: {
