@@ -113,3 +113,20 @@ exports.getOrderById = async (req, res) => {
     res.status(500).send({ error: "An error occurred while fetching the order." });
   }
 };
+
+exports.updateOrderStatus = async(req,res) => {
+    try {
+        const { orderStatus } = req.body;
+        const { orderId } = req.params;
+        if (!orderStatus) {
+            return res.status(400).json({ message: "orderStatus is required" });
+        }
+        const updatedOrder = await Order.findByIdAndUpdate(orderId,{orderStatus},{ new: true });
+        if(!updatedOrder){
+            return res.status(404).json({ message: "order status not updated" });
+        }
+        res.status(200).json({ message: "order status updated", updatedOrder });
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating order status', error:error.message })
+    }
+}

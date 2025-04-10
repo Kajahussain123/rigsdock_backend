@@ -4,7 +4,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 
 exports.createCategory = async (req, res) => {
-    const { name, description, status, maincategory } = req.body;
+    const { name, description, status, maincategory, commissionPercentage } = req.body;
 
     if (!req.file) {
         return res.status(400).json({ message: 'Category image is required' });
@@ -17,6 +17,7 @@ exports.createCategory = async (req, res) => {
             description,
             maincategory,
             status: status || 'active',
+            commissionPercentage: commissionPercentage || 0,
         });
 
         await newCategory.save();
@@ -72,7 +73,7 @@ exports.getCategoryById = async (req, res) => {
 // 🚀 Update category (Only description & status)
 exports.updateCategory = async (req, res) => {
     const { id } = req.params;
-    const { description, status } = req.body;
+    const { description, status, commissionPercentage } = req.body;
 
     try {
         const category = await Category.findById(id);
@@ -80,8 +81,9 @@ exports.updateCategory = async (req, res) => {
             return res.status(404).json({ message: 'Category not found' });
         }
 
-        if (description) category.description = description;
-        if (status) category.status = status;
+        if (description !== undefined) category.description = description;
+        if (status !== undefined) category.status = status;
+        if (commissionPercentage !== undefined) category.commissionPercentage = commissionPercentage;
 
         await category.save();
         res.status(200).json({ message: 'Category updated successfully', category });
@@ -89,6 +91,7 @@ exports.updateCategory = async (req, res) => {
         res.status(500).json({ message: 'Error updating category', error: err.message });
     }
 };
+
 
 // 🚀 Delete category
 exports.deleteCategory = async (req, res) => {

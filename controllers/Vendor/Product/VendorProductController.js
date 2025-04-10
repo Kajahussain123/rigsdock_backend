@@ -5,7 +5,7 @@ const fs = require('fs');
 
 //create a new product
 exports.createProduct = async (req, res) => {
-  const { name, description, price, stock,brand, subcategory, attributes,category,maincategory,deliveryfee,length,breadth,height,weight } = req.body;
+  const { name, description, price,finalPrice, BISCode, HSNCode ,stock,brand, subcategory, attributes,category,maincategory,deliveryfee,length,breadth,height,weight } = req.body;
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "At least one product image is required" });
@@ -13,7 +13,7 @@ exports.createProduct = async (req, res) => {
 
     const imagePaths = req.files.images.map((file) => file.filename);
 
-    if (!name || !description || !price || !stock || !brand || !category || !maincategory || !length || !breadth || !height || !weight) {
+    if (!name || !description || !price || !finalPrice || !stock || !BISCode || !HSNCode || !brand || !category || !maincategory || !length || !breadth || !height || !weight) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -28,6 +28,7 @@ exports.createProduct = async (req, res) => {
       name,
       description,
       price,
+      finalPrice,
       stock,
       images: imagePaths,
       brand,
@@ -37,6 +38,8 @@ exports.createProduct = async (req, res) => {
       owner: req.user.id,
       attributes: new Map(Object.entries(attributes)),
       length,
+      HSNCode,
+      BISCode,
       breadth,
       height,
       weight
