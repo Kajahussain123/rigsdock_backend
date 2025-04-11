@@ -385,7 +385,11 @@ exports.placeOrder = async (req, res) => {
       res.status(201).json(responseData);
 
   } catch (error) {
-      console.error("Error placing order:", error);
+    console.error("Error placing order:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
       if (!res.headersSent) {
           res.status(500).json({ 
               message: "Error placing order", 

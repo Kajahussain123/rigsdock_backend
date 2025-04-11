@@ -23,8 +23,8 @@ async function getShiprocketToken() {
     
     // If no token exists or it's about to expire, get a new one
     const response = await axios.post('https://apiv2.shiprocket.in/v1/external/auth/login', {
-      email: "bijith.codeedx@gmail.com",
-      password: "Rigsdocks@123"
+      email: "akhilhamza27@gmail.com",
+      password: "RigsDock@123"
     });
     
     // Save the new token to the database
