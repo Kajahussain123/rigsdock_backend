@@ -15,4 +15,7 @@ router.get('/get/:orderId',verifyToken(['Admin']),orderController.getOrderById);
 // track order
 router.get('/track-order/:orderId',verifyToken(['Admin']),orderController.trackOrder);
 
+router.put('/:orderId/settlement',verifyToken(['Admin']), orderController.updateOrderSettlement);
+
+
 module.exports = router;

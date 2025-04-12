@@ -3,38 +3,120 @@ const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const { trackShipment } = require('../../../controllers/Shiprocket/ShipRocketController');
 
 // get all orders
-exports.getAllOrders = async (req,res) => {
+// exports.getAllOrders = async (req,res) => {
+//     try {
+//         const orders = await Order.find().populate('user').populate({
+//             path: 'items.product',
+//             populate: [
+//                 { path: 'owner', model: 'Vendor' },
+//                 { path: 'category', model: 'Category' } // populate category
+//             ]
+//           });
+//         if(orders.length === 0) {
+//             return res.status(404).json({ message: "no orders found" });
+//         }
+
+//         const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
+//         const platformFee = platformFeeData?.amount || 0; 
+
+//         // Calculate final price for each order
+//         const ordersWithPlatformFee = orders.map(order => {
+//             const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
+//             return {
+//                 ...order.toObject(), // Convert Mongoose document to plain object
+//                 platformFee,
+//                 finalTotalPrice: finalTotal
+//             };
+//         });
+
+
+//         res.status(200).json({ message: "orders fetched successfully",total: orders.length ,orders: ordersWithPlatformFee  });
+//     } catch (error) {
+//         res.status(500).json({ message: 'Error fetching orders', error:error.message })
+//     }
+// }
+
+
+exports.getAllOrders = async (req, res) => {
     try {
         const orders = await Order.find().populate('user').populate({
             path: 'items.product',
-            populate: {
-              path: 'owner',
-              model: 'Vendor' // Make sure this matches your ownerType model name
-            }
-          });
-        if(orders.length === 0) {
+            populate: [
+                { path: 'owner', model: 'Vendor' },
+                { path: 'category', model: 'Category' } // populate category
+            ]
+        });
+        
+        if (orders.length === 0) {
             return res.status(404).json({ message: "no orders found" });
         }
 
         const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
-        const platformFee = platformFeeData?.amount || 0; 
+        const platformFee = platformFeeData?.amount || 0;
 
-        // Calculate final price for each order
-        const ordersWithPlatformFee = orders.map(order => {
-            const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
+        // Calculate commission and other details for each order
+        const ordersWithCalculations = orders.map(order => {
+            // Calculate commission for each item
+            const itemsWithCommission = order.items.map(item => {
+                const product = item.product;
+                const commissionPercentage = product.category?.commissionPercentage || 0;
+                const itemPrice = item.price; // Final price paid by customer
+                const commissionAmount = (itemPrice * commissionPercentage) / 100;
+                const vendorAmount = itemPrice - commissionAmount;
+
+                return {
+                    ...item.toObject(),
+                    commissionPercentage,
+                    commissionAmount,
+                    vendorAmount
+                };
+            });
+
+            // Calculate totals for the entire order
+            const totalCommission = itemsWithCommission.reduce((sum, item) => sum + item.commissionAmount, 0);
+            const totalVendorAmount = itemsWithCommission.reduce((sum, item) => sum + item.vendorAmount, 0);
+            const finalTotal = order.totalPrice + platformFee;
+
             return {
-                ...order.toObject(), // Convert Mongoose document to plain object
+                ...order.toObject(),
                 platformFee,
-                finalTotalPrice: finalTotal
+                finalTotalPrice: finalTotal,
+                items: itemsWithCommission,
+                totalCommission,
+                totalVendorAmount
             };
         });
 
-
-        res.status(200).json({ message: "orders fetched successfully",total: orders.length ,orders: ordersWithPlatformFee  });
+        res.status(200).json({ 
+            message: "orders fetched successfully",
+            total: orders.length,
+            orders: ordersWithCalculations
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching orders', error:error.message })
+        res.status(500).json({ message: 'Error fetching orders', error: error.message });
     }
-}
+};
+
+// PUT /api/orders/:orderId/settlement
+exports.updateOrderSettlement = async (req, res) => {
+    const { orderId } = req.params;
+    const { settled } = req.body;
+  
+    try {
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+  
+      order.settled = settled;
+      await order.save();
+  
+      res.status(200).json({ message: `Order marked as ${settled ? 'settled' : 'not settled'}`, order });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to update settlement status', error: error.message });
+    }
+  };
+  
 
 // update orderstatus
 exports.updateOrderStatus = async(req,res) => {
