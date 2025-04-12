@@ -89,6 +89,10 @@ const orderSchema = new mongoose.Schema(
       ref: "Address",
       required: true,
     },
+    settled: {
+      type: Boolean,
+      default: false
+    },   
     shiprocketOrderId: { type: String },
     shiprocketShipmentId: { type: String },
     trackingNumber: { type: String },
