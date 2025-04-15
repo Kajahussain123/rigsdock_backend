@@ -6,7 +6,8 @@ const multerConfig = require('../../middleware/multer');
 const uploadFields = multerConfig.fields([
     { name: "images", maxCount: 5 },
     { name: "storelogo", maxCount: 1 },
-    { name: "license", maxCount: 1 }
+    { name: "license", maxCount: 1 },
+    { name: 'passbookPhoto', maxCount: 1 },
 ])
 
 // vendor Registration
