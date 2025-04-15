@@ -107,7 +107,6 @@ const vendorSchema = new mongoose.Schema({
             message: "Passbook photo must be a PNG, JPG, or JPEG file",
         }
     },
-    
     // ratingsAverage: { 
     //     type: Number,  
     //     default: 0, 
