@@ -87,6 +87,27 @@ const vendorSchema = new mongoose.Schema({
         required:[true, "password is required"],
         minlength: [6, 'Password must be at least 6 characters long'],
     },
+    accountNumber: {
+        type: String,
+        required: [true, "Account number is required"],
+        match: [/^\d{9,18}$/, "Please enter a valid account number"]
+    },
+    ifscCode: {
+        type: String,
+        required: [true, "IFSC code is required"],
+        match: [/^[A-Z]{4}0[A-Z0-9]{6}$/, "Please enter a valid IFSC code"]
+    },
+    passbookPhoto: {
+        type: String,
+        required: [true, "Passbook photo is required"],
+        validate: {
+            validator: function (value) {
+                return /\.(png|jpg|jpeg)$/i.test(value);
+            },
+            message: "Passbook photo must be a PNG, JPG, or JPEG file",
+        }
+    },
+    
     // ratingsAverage: { 
     //     type: Number,  
     //     default: 0, 

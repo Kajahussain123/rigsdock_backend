@@ -3,43 +3,44 @@ const fs = require('fs');
 const path = require('path');
 
 //create new vendor
-exports.createVendor = async(req,res) => {
+exports.createVendor = async (req, res) => {
     try {
         const existingVendorMail = await Vendor.findOne({ email: req.body.email });
         if (existingVendorMail) {
             return res.status(409).json({ message: 'Vendor email already exists' });
         }
+
         const existingVendorPhone = await Vendor.findOne({ number: req.body.number });
         if (existingVendorPhone) {
             return res.status(409).json({ message: 'Vendor phone number already exists' });
         }
+
         const images = req.files.images;
-        const storeLogo = req.files.storelogo ? req.files.storelogo[0] : null;
-        const license = req.files.license ? req.files.license[0] : null;
-        
-        if(!storeLogo) {
-            return res.status(422).json({ message: "Store logo is required" });
-        }
-        if(!license) {
-            return res.status(422).json({ message: "License is required" });
-        }
-        if(!images){
-            return res.status(422).json({ message: "at least one vendor image required" })
-        }
-        const imagePaths = images.map((file) => file.filename);
+        const storeLogo = req.files.storelogo?.[0];
+        const license = req.files.license?.[0];
+        const passbookPhoto = req.files.passbookPhoto?.[0];
+
+        if (!storeLogo) return res.status(422).json({ message: "Store logo is required" });
+        if (!license) return res.status(422).json({ message: "License is required" });
+        if (!passbookPhoto) return res.status(422).json({ message: "Passbook photo is required" });
+        if (!images || images.length === 0) return res.status(422).json({ message: "At least one vendor image is required" });
+
+        const imagePaths = images.map(file => file.filename);
 
         const newVendor = new Vendor({
             ...req.body,
             storelogo: storeLogo.filename,
             license: license.filename,
+            passbookPhoto: passbookPhoto.filename,
             images: imagePaths
         });
+
         await newVendor.save();
-        res.status(201).json({ message: "vendor created successfully", vendor: newVendor });
+        res.status(201).json({ message: "Vendor created successfully", vendor: newVendor });
     } catch (error) {
-        res.status(500).json({ message: "Internal Server Error", error: error.message});
+        res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
-}
+};
 
 //get all vendors
 exports.getAllVendors = async(req,res) => {
@@ -72,55 +73,56 @@ exports.getVendorById = async(req,res) => {
 }
 
 // update vendor
-exports.updateVendor = async(req,res) => {
+exports.updateVendor = async (req, res) => {
     const { id } = req.params;
     try {
         const vendor = await Vendor.findById(id);
-        if(!vendor){
-            return res.status(404).json({ message: 'vendor not found' })
-        }
+        if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
 
         const images = req.files.images || [];
         const existingImages = vendor.images;
-        const newImages = images.map((file) => file.filename);
+        const newImages = images.map(file => file.filename);
 
-        if(existingImages.length + newImages.length > 5){
+        if (existingImages.length + newImages.length > 5) {
             return res.status(400).json({ message: "Cannot have more than 5 images for a vendor" });
         }
 
-        // Delete old store logo if a new one is uploaded
-        if (req.files.storelogo && req.files.storelogo[0]) {
-            const oldStoreLogoPath = path.join(__dirname, "../uploads/admin/vendor", vendor.storelogo);
-            if (fs.existsSync(oldStoreLogoPath)) {
-              fs.unlinkSync(oldStoreLogoPath);
-            }
+        if (req.files.storelogo?.[0]) {
+            const oldPath = path.join(__dirname, "../uploads/admin/vendor", vendor.storelogo);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             vendor.storelogo = req.files.storelogo[0].filename;
-          }
-        
-        // Delete old license if a new one is uploaded
-        if (req.files.license && req.files.license[0]) {
-            const oldLicensePath = path.join("./uploads", vendor.license);
-            if (fs.existsSync(oldLicensePath)) {
-            fs.unlinkSync(oldLicensePath);
-            }
+        }
+
+        if (req.files.license?.[0]) {
+            const oldPath = path.join("./uploads", vendor.license);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             vendor.license = req.files.license[0].filename;
+        }
+
+        if (req.files.passbookPhoto?.[0]) {
+            const oldPath = path.join("./uploads", vendor.passbookPhoto);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            vendor.passbookPhoto = req.files.passbookPhoto[0].filename;
         }
 
         const updatedVendorData = {
             ...req.body,
-            images: [...existingImages,...newImages],
+            images: [...existingImages, ...newImages],
             storelogo: vendor.storelogo,
             license: vendor.license,
-        }
-        const updatedVendor = await Vendor.findByIdAndUpdate(id,updatedVendorData,{ new: true, runValidators: true  });
-        res.status(200).json({
-            message: "vendor updated successfully",
-            updatedVendor
+            passbookPhoto: vendor.passbookPhoto
+        };
+
+        const updatedVendor = await Vendor.findByIdAndUpdate(id, updatedVendorData, {
+            new: true,
+            runValidators: true
         });
+
+        res.status(200).json({ message: "Vendor updated successfully", updatedVendor });
     } catch (error) {
         res.status(500).json({ message: 'Error updating vendor', error: error.message });
     }
-}
+};
 
 //delete Vendor
 exports.deleteVendor = async(req,res) => {
