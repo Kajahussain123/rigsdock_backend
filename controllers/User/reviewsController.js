@@ -2,46 +2,64 @@ const Review = require("../../models/User/ReviesModel");
 const Product = require("../../models/admin/ProductModel");
 const Order = require("../../models/User/OrderModel");
 const upload = require("../../middleware/multer");
+const path = require('path');
 
 // Add a review
 exports.addReview = async (req, res) => {
     try {
-        const { userId, productId, rating, review } = req.body;
-        const images = req.files ? req.files.map(file => file.path) : []; // Get uploaded image paths
+        const { userId, productId, orderId, rating, review } = req.body;
+        
+        // Extract only filenames
+        const images = req.files ? req.files.map(file => path.basename(file.path)) : [];
 
-        // Check if the user has purchased the product & order is delivered
+        // Check if the specific order exists and is delivered
         const order = await Order.findOne({
+            _id: orderId,
             user: userId,
             "items.product": productId,
-            orderStatus: "Delivered" // Ensure the order is delivered
+            orderStatus: "Delivered"
         });
 
-        // console.log("Order found:", order);
-
         if (!order) {
-            return res.status(400).json({ message: "You can only review products that have been delivered." });
+            return res.status(400).json({ 
+                message: "Order not found or not delivered. You can only review delivered products." 
+            });
         }
 
-        // Check if the user already reviewed the product
-        const existingReview = await Review.findOne({ user: userId, product: productId });
+        // Check if the user already reviewed this product for this specific order
+        const existingReview = await Review.findOne({ 
+            user: userId, 
+            product: productId,
+            order: orderId
+        });
+
         if (existingReview) {
-            return res.status(400).json({ message: "You have already reviewed this product." });
+            return res.status(400).json({ 
+                message: "You have already reviewed this product for this order." 
+            });
         }
 
-        // Create a new review
+        // Create new review with filenames
         const newReview = new Review({
             user: userId,
             product: productId,
+            order: orderId,
             rating,
             review,
-            images // Save array of image paths
+            images
         });
 
         await newReview.save();
 
-        res.status(201).json({ message: "Review added successfully", review: newReview });
+        res.status(201).json({ 
+            message: "Review added successfully", 
+            review: newReview 
+        });
     } catch (error) {
-        res.status(500).json({ message: "Error adding review", error: error.message });
+        res.status(500).json({ 
+            message: "Error adding review", 
+            error: error.message 
+        });
     }
 };
 
