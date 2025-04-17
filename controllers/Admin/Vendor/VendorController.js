@@ -1,6 +1,7 @@
 const Vendor = require('../../../models/Vendor/vendorModel');
 const fs = require('fs');
 const path = require('path');
+const Order = require('../../../models/User/OrderModel')
 
 //create new vendor
 exports.createVendor = async (req, res) => {
@@ -59,18 +60,86 @@ exports.getAllVendors = async(req,res) => {
 }
 
 // get vendor by id
-exports.getVendorById = async(req,res) => {
+exports.getVendorById = async (req, res) => {
     const { id } = req.params;
+
     try {
         const vendor = await Vendor.findById(id);
-        if(!vendor){
-            return res.status(404).json({ message: "vendor not found" });
+        if (!vendor) {
+            return res.status(404).json({ message: "Vendor not found" });
         }
-        res.status(200).json(vendor);
+
+        // Fetch orders that have items owned by this vendor
+        const orders = await Order.find()
+            .populate('user')
+            .populate({
+                path: 'items.product',
+                populate: [
+                    { path: 'owner', model: 'Vendor' },
+                    { path: 'category', model: 'Category' }
+                ]
+            });
+
+        // Filter orders that include items from this vendor
+        const vendorOrders = orders.filter(order =>
+            order.items.some(item => item.product.owner?._id.toString() === id)
+        );
+
+        let totalSettledAmount = 0;
+        let totalBalance = 0;
+        let transactionHistory = [];
+
+        for (const order of vendorOrders) {
+            const vendorItems = order.items.filter(item => item.product.owner?._id.toString() === id);
+
+            let vendorAmount = 0;
+            let commission = 0;
+
+            const detailedItems = vendorItems.map(item => {
+                const commissionPercentage = item.product.category?.commissionPercentage || 0;
+                const commissionAmount = (item.price * commissionPercentage) / 100;
+                const vendorNet = item.price - commissionAmount;
+
+                vendorAmount += vendorNet;
+                commission += commissionAmount;
+
+                return {
+                    productName: item.product.name,
+                    price: item.price,
+                    commissionPercentage,
+                    commissionAmount,
+                    vendorAmount: vendorNet
+                };
+            });
+
+            if (order.settled) {
+                totalSettledAmount += vendorAmount;
+            } else {
+                totalBalance += vendorAmount;
+            }
+
+            transactionHistory.push({
+                orderId: order._id,
+                settled: order.settled,
+                createdAt: order.createdAt,
+                items: detailedItems,
+                totalVendorAmount: vendorAmount,
+                totalCommission: commission
+            });
+        }
+
+        res.status(200).json({
+            vendor,
+            totalOrders: vendorOrders.length,
+            totalSettledAmount,
+            totalBalance,
+            transactionHistory
+        });
     } catch (error) {
-        res.status(500).json({message: 'Error fetching vendor',error: error.message});
+        res.status(500).json({ message: 'Error fetching vendor details', error: error.message });
     }
-}
+};
+
 
 // update vendor
 exports.updateVendor = async (req, res) => {
