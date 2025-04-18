@@ -8,6 +8,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000', 
     'https://rigsdock.com',
+    'https://www.rigsdock.com',
     'https://vermillion-beijinho-abb79a.netlify.app'
   ],
   methods: ['GET','HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
