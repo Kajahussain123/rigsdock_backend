@@ -70,15 +70,14 @@ exports.getOrderById = async (req, res) => {
   const { orderId } = req.params;
 
   try {
-    // Find the order by ID
     const order = await Order.findById(orderId)
       .populate("user", "name email")
       .populate({
-        path: 'items.product',
-        populate: {
-          path: 'owner',
-          model: 'Vendor'
-        }
+        path: "items.product",
+        populate: [
+          { path: "owner", model: "Vendor" },
+          { path: "category", model: "Category" }
+        ]
       })
       .populate("shippingAddress");
 
@@ -86,33 +85,28 @@ exports.getOrderById = async (req, res) => {
       return res.status(404).send({ error: "Order not found." });
     }
 
-    // Find all products owned by the logged-in vendor
     const vendorProducts = await Product.find({ owner: req.user.id }).select("_id");
 
-    // Extract product IDs
     const productIds = vendorProducts.map(product => product._id.toString());
 
-    // Filter items to include only the vendor's products
     order.items = order.items.filter(item => {
       const itemProductId = item.product._id.toString();
       return productIds.includes(itemProductId);
     });
 
-    // Recalculate the total price based on the filtered items
     order.totalPrice = order.items.reduce((total, item) => total + item.price * item.quantity, 0);
 
-    // If no items belong to the vendor, return an empty response
     if (order.items.length === 0) {
       return res.status(200).send({ message: "No items in this order belong to the logged-in vendor." });
     }
 
-    // Return the filtered order
     res.status(200).json(order);
   } catch (error) {
     console.error("Error fetching order:", error);
     res.status(500).send({ error: "An error occurred while fetching the order." });
   }
 };
+
 
 exports.updateOrderStatus = async(req,res) => {
     try {
