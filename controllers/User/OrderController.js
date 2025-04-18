@@ -14,6 +14,12 @@ const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 const qrcode = require("qrcode");
+const {
+  createInvoice,
+  createCustomer,
+  createProductInZoho,
+  searchCustomerInZoho,
+} = require("../../utils/zohoBooksService");
 
 
 const PHONEPE_CLIENT_ID = process.env.PHONEPE_CLIENT_ID;
@@ -636,70 +642,134 @@ exports.updateOrderStatus = async (req, res) => {
     }
 };
 
-exports.generateInvoice = async (req, res) => {
-    try {
-      const { orderId } = req.params;
-      const order = await Order.findById(orderId)
-        .populate({
-          path: "user",
-          select: "name email mobileNumber company zohoCustomerId",
-        })
-        .populate({
-          path: "items.product",
-          select: "name description sku zohoItemId price finalPrice",
-        })
-        .populate("shippingAddress");
-      if (!order) {
-        return res.status(404).json({ error: "Order not found" });
+exports.getOrdersByMainOrderId = async (req, res) => {
+  try {
+    const { mainOrderId } = req.params;
+    
+    // Fetch platform fee information
+    const platformFee = await PlatformFee.findOne();
+
+    const orders = await Order.find({ mainOrderId })
+      .populate({
+        path: "items.product",
+        populate: [
+          { path: "owner" }, // Populate seller info
+        ],
+      })
+      .populate("shippingAddress")
+      .populate("user");
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: "Orders not found" });
+    }
+
+    // Include platform fee information in the response
+    res.status(200).json({ 
+      orders,
+      platformFee: platformFee || { feeType: "percentage", amount: 0 } // Default values if fee not set
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching orders", error: error.message });
+  }
+};
+
+
+exports.generateInvoiceForMainOrder = async (req, res) => {
+  try {
+    const { mainOrderId } = req.params;
+
+    // Fetch platform fee information
+    const platformFee = await PlatformFee.findOne();
+    
+    const orders = await Order.find({ mainOrderId })
+      .populate({
+        path: "items.product",
+        populate: [{ path: "owner" }],
+      })
+      .populate("shippingAddress")
+      .populate("user");
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ error: "Orders not found" });
+    }
+
+    const user = orders[0].user;
+    const shippingAddress = orders[0].shippingAddress;
+
+    const determineTaxType = (buyerState, sellerState) => {
+      // Convert states to lowercase for comparison
+      buyerState = (buyerState || "").toLowerCase().trim();
+      sellerState = (sellerState || "").toLowerCase().trim();
+    
+      // If both in Kerala (or same state), use CGST+SGST (intra-state)
+      if (!buyerState || !sellerState || buyerState === sellerState) {
+        return "intra-state";
+      } else {
+        return "inter-state";
       }
-      let customerId = order.user.zohoCustomerId;
-      if (!customerId) {
-        const existingCustomer = await searchCustomerInZoho(order.user.email);
-        if (existingCustomer) {
-          customerId = existingCustomer.contact_id;
-          order.user.zohoCustomerId = customerId;
-          await order.user.save();
-        } else {
-          const customerData = {
-            contact_name: `${order.shippingAddress.fullName.trim()} (${Date.now()})`,
-            company_name: order.user.company || order.shippingAddress.fullName,
-            email: order.shippingAddress.email
-              ? order.user.email.toLowerCase().trim()
-              : null,
-            phone: order.shippingAddress.phone,
-            contact_type: "customer",
-            customer_sub_type: "business",
-            billing_address: {
-              attention: order.shippingAddress.fullName,
-              address: order.shippingAddress.addressLine1 || "Default Address",
-              address_line2: order.shippingAddress.addressLine2 || "",
-              city: order.shippingAddress.city,
-              state: order.shippingAddress.state,
-              zip: order.shippingAddress.zipCode,
-              country: order.shippingAddress.country,
-              phone:
-                order.shippingAddress.phone ||
-                order.user.mobileNumber ||
-                "+0000000000",
-            },
-          };
-          try {
-            const newCustomer = await createCustomer(customerData);
-            customerId = newCustomer.contact_id;
-            order.user.zohoCustomerId = customerId;
-            await order.user.save();
-          } catch (customerError) {
-            customerData.contact_name = `${order.shippingAddress.fullName.trim()} (${Date.now()}-${Math.floor(
-              Math.random() * 1000
-            )})`;
-            const retryCustomer = await createCustomer(customerData);
-            customerId = retryCustomer.contact_id;
-            order.user.zohoCustomerId = customerId;
-            await order.user.save();
-          }
+    };
+
+    const getTaxId = (taxType) => {
+      if (taxType === "intra-state") {
+        return "2463553000000082173"; // GST18 (specific for intra-state)
+      } else {
+        return "2463553000000082071"; // IGST18 (specific for inter-state)
+      }
+    };
+    
+    
+    let customerId = user.zohoCustomerId;
+    if (!customerId) {
+      const existingCustomer = await searchCustomerInZoho(user.email);
+      if (existingCustomer) {
+        customerId = existingCustomer.contact_id;
+        user.zohoCustomerId = customerId;
+        await user.save();
+      } else {
+        const customerData = {
+          contact_name: `${
+            shippingAddress?.firstName?.trim() || "Customer"
+          } (${Date.now()})`,
+          company_name: user.company || shippingAddress.firstName,
+          email: user.email,
+          phone: shippingAddress.phone,
+          contact_type: "customer",
+          customer_sub_type: "business",
+          billing_address: {
+            attention: `${shippingAddress?.firstName?.trim() || ""} ${
+              shippingAddress?.lastName?.trim() || ""
+            }`.trim(),
+            address: shippingAddress.addressLine1 || "Default Address",
+            address_line2: shippingAddress.addressLine2 || "",
+            city: shippingAddress.city,
+            state: shippingAddress.state,
+            zip: shippingAddress.zipCode,
+            country: shippingAddress.country,
+            phone: shippingAddress.phone || user.mobileNumber || "+0000000000",
+          },
+        };
+        try {
+          const newCustomer = await createCustomer(customerData);
+          customerId = newCustomer.contact_id;
+          user.zohoCustomerId = customerId;
+          await user.save();
+        } catch (customerError) {
+          customerData.contact_name = `${
+            shippingAddress.firstName?.trim() || "Customer"
+          } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
+
+          const retryCustomer = await createCustomer(customerData);
+          customerId = retryCustomer.contact_id;
+          user.zohoCustomerId = customerId;
+          await user.save();
         }
       }
-      // Product handling
+    }
+
+    // Process products for Zoho
+    for (const order of orders) {
       for (const item of order.items) {
         if (!item.product.zohoItemId) {
           const productData = {
@@ -713,100 +783,459 @@ exports.generateInvoice = async (req, res) => {
             item.product.zohoItemId = newProduct.item_id;
             await item.product.save();
           } catch (productError) {
-            productData.name = `${item.product.name} (${Date.now()}-${Math.floor(
-              Math.random() * 1000
-            )})`;
+            productData.name = `${
+              item.product.name
+            } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
             const retryProduct = await createProductInZoho(productData);
             item.product.zohoItemId = retryProduct.item_id;
             await item.product.save();
           }
         }
       }
-      // Zoho invoice creation
-      const invoiceData = {
-        customer_id: customerId,
-        currency_id: order.currencyId || 982000000000190,
-        line_items: order.items.map((item) => ({
+    }
+
+    // Prepare line items with appropriate tax IDs
+    const lineItems = [];
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        const taxType = determineTaxType(
+          order.shippingAddress.state,
+          item.product.owner.state
+        );
+        
+        lineItems.push({
           item_id: item.product.zohoItemId,
           name: item.product.name,
           description: item.product.description,
           quantity: item.quantity,
           rate: item.product.finalPrice || item.product.price,
-          sku: item.product.sku || `SKU-${item.product._id}`,
-        })),
-        reference_number: `ORDER-${orderId}`,
-        notes: `Order for ${order.shippingAddress.fullName}`,
-      };
-      const invoiceResponse = await createInvoice(invoiceData);
-      // PDF Generation with QR Code
-      const doc = new PDFDocument({
-        size: "A4",
-        margins: {
-          top: 30,
-          bottom: 30,
-          left: 50,
-          right: 50,
-        },
-      });
-      const invoiceDir = path.join(__dirname, "invoices");
-      if (!fs.existsSync(invoiceDir)) {
-        fs.mkdirSync(invoiceDir, { recursive: true });
+          tax_id: getTaxId(taxType), // Use the new function
+          sku: item.product.sku || `SKU-${item.product._id}`
+        });
       }
-      const invoiceFileName = `invoice-${orderId}-${Date.now()}.pdf`;
-      const invoicePath = path.join(invoiceDir, invoiceFileName);
-      const invoiceUrl = `${req.protocol}://${req.get(
-        "host"
-      )}/invoices/${invoiceFileName}`;
-      // Generate QR Code
-      const qrCodeDataUrl = await qrcode.toDataURL(invoiceUrl);
-      const writeStream = fs.createWriteStream(invoicePath);
-      doc.pipe(writeStream);
-      // Color Palette
-      const colors = {
-        text: "#000000",
-        gray: "#666666",
-        border: "#E0E0E0",
-        highlight: "#4a90e2",
-        warningBox: "#f8f9fa",
-      };
+    }
+
+    // Add Platform Fee as a line item
+    if (platformFee) {
+      // For Zoho invoice, include platform fee
+      lineItems.push({
+        name: "RigsDock Platform Fee",
+        description: "Service charge for using RigsDock platform",
+        quantity: 1,
+        rate: platformFee.feeType === "fixed" ? platformFee.amount : 
+          (orders.reduce((sum, order) => sum + order.totalAmount, 0) * platformFee.amount / 100),
+        tax_id: getTaxId("intra-state") // Assuming platform fee is always intra-state
+      });
+    }
+
+    const debugTaxInfo = (orders) => {
+      console.log("===== TAX DEBUGGING INFO =====");
       
-      // Add signature image URL
-      const signatureUrl = "https://i.postimg.cc/Y2GzrHML/Untitled-design.png";
-      
-      // Function to add footer to each page
-      const addFooter = () => {
-        // Signature on the right side
-        try {
-          axios.get(signatureUrl, { responseType: 'arraybuffer' })
-            .then(response => {
-              const buffer = Buffer.from(response.data, 'binary');
-              doc.image(buffer, 400, 700, { width: 100 });
-            })
-            .catch(err => {
-              console.error("Error loading signature:", err);
-            });
-        } catch (signatureError) {
-          console.error("Error with signature:", signatureError);
-        }
-        
-        // Contact information at the bottom
-        doc
-          .font("Helvetica")
-          .fontSize(8)
-          .fillColor(colors.gray)
+      for (const order of orders) {
+        for (const item of order.items) {
+          const buyerState = order.shippingAddress.state || "";
+          const sellerState = item.product.owner.state || "";
           
-          .moveDown(0.5)
-          .text("Contact: +91 97784 66748 | Email: support@rigsdock.com", 50, 765, {
+          const taxType = determineTaxType(buyerState, sellerState);
+          
+          console.log(`Order ID: ${order._id}`);
+          console.log(`Product: ${item.product.name}`);
+          console.log(`Buyer State: "${buyerState}"`);
+          console.log(`Seller State: "${sellerState}"`);
+          console.log(`Tax Type: ${taxType}`);
+          console.log("----------------------------");
+        }
+      }
+      
+      // Log all available tax IDs for reference
+      console.log("\n===== AVAILABLE TAX IDS =====");
+      // You can fetch this from your Zoho API or hardcode the values from paste-2.txt
+      const taxes = [
+        { id: "2463553000000064031", name: "CGST", percentage: 9 },
+        { id: "2463553000000064049", name: "CGST + SGST", percentage: 18 },
+        { id: "2463553000000064043", name: "IGST", percentage: 18 },
+        { id: "2463553000000082071", name: "IGST18", percentage: 18 }
+        // Add more as needed
+      ];
+      
+      taxes.forEach(tax => {
+        console.log(`${tax.name} (${tax.percentage}%): ${tax.id}`);
+      });
+      
+      console.log("=============================");
+    };
+    
+    // Then call this function before your invoice creation
+    debugTaxInfo(orders);
+    // Zoho invoice creation with tax IDs
+    const invoiceData = {
+      customer_id: customerId,
+      currency_id: orders[0].currencyId || 982000000000190,
+      line_items: lineItems,
+      reference_number: `ORDER-${mainOrderId}`,
+      notes: `Order for ${
+        shippingAddress.firstName && shippingAddress.lastName
+          ? `${shippingAddress.firstName} ${shippingAddress.lastName}`
+          : "Customer"
+      }`,
+    };
+
+    const invoiceResponse = await createInvoice(invoiceData);
+
+    // PDF Generation
+    const doc = new PDFDocument({
+      size: "A4",
+      margins: {
+        top: 30,
+        bottom: 30,
+        left: 50,
+        right: 50,
+      },
+      autoFirstPage: true,
+    });
+
+    const invoiceDir = path.join(__dirname, "invoices");
+    if (!fs.existsSync(invoiceDir)) {
+      fs.mkdirSync(invoiceDir, { recursive: true });
+    }
+
+    const invoiceFileName = `invoice-${mainOrderId}-${Date.now()}.pdf`;
+    const invoicePath = path.join(invoiceDir, invoiceFileName);
+    const invoiceUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/invoices/${invoiceFileName}`;
+    const upiId = "yourupiid@bank";       // Your UPI ID
+    const payeeName = "Your Name";         // Your name or company name
+    const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&cu=INR`;
+    // Generate QR Code
+    const qrCodeDataUrl = await qrcode.toDataURL(upiUrl);
+    const writeStream = fs.createWriteStream(invoicePath);
+    doc.pipe(writeStream);
+
+    // Define colors
+    const colors = {
+      text: "#000000",
+      gray: "#666666",
+      border: "#E0E0E0",
+      highlight: "#4a90e2",
+      warningBox: "#f8f9fa",
+      platformFeeHighlight: "#ff9800", // Color for platform fee section
+    };
+
+    // Add logo URL - only need to add this once at the start
+    const logoUrl = "https://i.postimg.cc/K8ftVqFJ/Rigs-Docklogo.png";
+    const signatureUrl = "https://i.postimg.cc/Y2GzrHML/Untitled-design.png";
+
+    // Function to add footer to each page
+    const addFooter = () => {
+      const footerY = doc.page.height - 50;
+      // Contact information at the bottom
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor(colors.gray)
+        .text(
+          "Contact: +91 97784 66748 | Email: support@rigsdock.com",
+          50,
+          footerY,
+          {
+            width: doc.page.width - 100,
             align: "center",
-          });
-      };
+          }
+        );
+    };
+
+    // Set up page event to add footer to each page
+    doc.on("pageAdded", addFooter);
+
+    // Clear first auto-generated page and start fresh
+    doc.moveDown(0); // Move to top of first page
+
+    // Add logo to the first page
+    try {
+      const logoResponse = await axios.get(logoUrl, {
+        responseType: "arraybuffer",
+      });
+      const logoBuffer = Buffer.from(logoResponse.data, "binary");
+      doc.image(logoBuffer, 5, 20, { width: 200, height: 130 });
+    } catch (logoError) {
+      console.error("Error loading logo:", logoError);
+    }
+
+    // Create separate invoice pages for each vendor/seller
+    for (let i = 0; i < orders.length; i++) {
+      const order = orders[i];
+      const vendor = order.items[0].product.owner; // Assuming all items in an order have the same vendor
+
+      // Add a new page for vendors beyond the first one
+      if (i > 0) {
+        doc.addPage();
+      }
+
+      doc
+        .fontSize(16)
+        .fillColor(colors.text)
+        .text("TAX INVOICE", 300, 60, { align: "right" })
+        .moveDown(0.5);
+
+      doc
+        .fontSize(10)
+        .fillColor(colors.gray)
+        .text("Original for Recipient", 300, 80, { align: "right" })
+        .moveDown(1);
+
+      // Seller & Invoice Details
+      doc.fillColor(colors.text).fontSize(9);
+
+      // Create two-column layout for company and invoice details
+      doc
+        .text("Seller Details", 50, 120)
+        .text("Invoice Details", 350, 120)
+        .moveDown(0.5);
+
+      // Vendor information
+      doc
+        .font("Helvetica-Bold")
+        .text(`${vendor.businessname || "Vendor"} Pvt. Ltd.`, 50, 140)
+        .font("Helvetica")
+        .text(`${vendor.address || "Corporate Address"}`, 50, 155)
+        .text(`GSTIN: ${vendor.gst || "Pending"}`, 50, 170)
+        .text(`State: ${vendor.state || "Pending"}`, 50, 185);
+
+      doc
+        .text(
+          `Invoice No: ${invoiceResponse.invoice.invoice_number}-${i + 1}`,
+          350,
+          140
+        )
+        .text(`Date: ${new Date().toLocaleDateString()}`, 350, 155)
+        .text(`Order ID: ${order._id}`, 350, 170)
+        .text(`State: ${order.shippingAddress.state}`, 350, 185);
+
+      // QR Code
+      doc.image(qrCodeDataUrl, 500, 120, {
+        width: 70,
+        height: 70,
+      });
+
+      // Get shipping address fields with default values
+      const shippingAddress = order.shippingAddress || {};
+      // Access data through the _doc property
+      const shippingAddressData = shippingAddress._doc || shippingAddress;
+
+      const firstName = shippingAddressData.firstName || "Customer";
+      const lastName = shippingAddressData.lastName || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      // Billing Address with fixed name
+      doc
+        .fontSize(9)
+        .font("Helvetica-Bold")
+        .text("Billing Address:", 50, 210, { underline: true })
+        .font("Helvetica")
+        .text(fullName, 50, 225)
+        .text(`${order.shippingAddress.addressLine1 || ""}`, 50, 240)
+        .text(`${order.shippingAddress.addressLine2 || ""}`, 50, 255)
+        .text(
+          `${order.shippingAddress.city || ""}, ${
+            order.shippingAddress.state || ""
+          }`,
+          50,
+          270
+        )
+        .text(
+          `${order.shippingAddress.country || ""} - ${
+            order.shippingAddress.zipCode || ""
+          }`,
+          50,
+          285
+        )
+        .text(`Phone: ${order.shippingAddress.phone || "N/A"}`, 50, 300);
+
+      // Warranty Message Box with better alignment
+      doc
+        .rect(350, 210, 220, 60)
+        .fillAndStroke(colors.warningBox, colors.border);
+      doc
+        .fontSize(9)
+        .fillColor(colors.text)
+        .font("Helvetica-Bold")
+        .text("*Keep this invoice and", 370, 225)
+        .text("manufacturer box for", 370, 240)
+        .text("warranty purposes.", 370, 255);
+
+      // Line Items Table with improved alignment
+      const tableTop = 320;
+      const columnWidths = [35, 200, 70, 55, 110]; // Adjusted width for product description to fit tax column
+      const rowHeight = 25;
+      const headers = [
+        "S.No",
+        "Product Description",
+        "HSN",
+        "Quantity",
+        "Total Amount",
+      ];
+
+      // Draw Table Header with better styling
+      doc.lineWidth(0.5).strokeColor(colors.border);
+      doc
+        .rect(50, tableTop - 5, 530, 25)
+        .fillAndStroke(colors.highlight, colors.border);
+
+      headers.forEach((header, i) => {
+        doc
+          .font("Helvetica-Bold")
+          .fillColor("#FFFFFF")
+          .text(
+            header,
+            50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
+            tableTop,
+            {
+              width: columnWidths[i],
+              align:
+                i === 0 || i === 3
+                  ? "center"
+                  : i === 1
+                  ? "left"
+                  : i === 4
+                  ? "right"
+                  : "center",
+            }
+          );
+      });
+
+      // Line Items for this vendor's order with improved styling
+      let yPos = tableTop + 25;
+      doc.font("Helvetica").fillColor(colors.text);
+
+      // Add alternating row colors for better readability
+      let isEvenRow = false;
+
+      order.items.forEach((item, index) => {
+        // Add row background
+        if (isEvenRow) {
+          doc
+            .rect(50, yPos - 5, 530, rowHeight)
+            .fillColor("#F9F9F9")
+            .fill();
+        }
+        doc.fillColor(colors.text);
+
+        const rowData = [
+          index + 1,
+          item.product.name,
+          item.product.sku || "N/A",
+          item.quantity,
+          `Rs ${(item.product.finalPrice * item.quantity).toFixed(2)}`,
+        ];
+
+        rowData.forEach((data, i) => {
+          doc.text(
+            data.toString(),
+            50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
+            yPos,
+            {
+              width: columnWidths[i],
+              align:
+                i === 0 || i === 3
+                  ? "center"
+                  : i === 1
+                  ? "left"
+                  : i === 4
+                  ? "right"
+                  : "center",
+            }
+          );
+        });
+
+        // Draw horizontal line between rows
+        doc
+          .moveTo(50, yPos + rowHeight - 2)
+          .lineTo(550, yPos + rowHeight - 2)
+          .strokeColor(colors.border)
+          .stroke();
+
+        yPos += rowHeight;
+        isEvenRow = !isEvenRow;
+      });
+
+      // Calculate subtotal for this vendor's order with GST tax structure
+      const subtotal = order.items.reduce(
+        (sum, item) => sum + item.product.finalPrice * item.quantity,
+        0
+      );
+
+      // Determine tax type based on shipping and vendor states
+      const taxType = determineTaxType(
+        order.shippingAddress.state,
+        vendor.state
+      );
+
+      const gstRate = 0.18; // 18% GST rate
+      const gstAmount = subtotal * gstRate;
+      const total = subtotal + gstAmount;
+
+      const priceWidth = 90;
+      const labelX = 360;
+      const priceX = 450;
+
+      // Add box around totals section with improved alignment
+      doc
+        .rect(350, yPos + 5, 200, 80) // Increased height to accommodate more tax lines
+        .fillAndStroke("#F9F9F9", colors.border);
+
+      // Left-align labels and right-align amounts
+      doc.font("Helvetica").fontSize(9).fillColor(colors.text);
+
+      // Subtotal row
+      doc.text("Subtotal", labelX, yPos + 10);
+      doc.text(`Rs ${subtotal.toFixed(2)}`, priceX, yPos + 10, {
+        align: "right",
+        width: priceWidth,
+      });
+
+      // Tax rows - different display based on tax type
+      if (taxType === "intra-state") {
+        // CGST and SGST (9% each)
+        const cgst = gstAmount / 2;
+        const sgst = gstAmount / 2;
+
+        doc.text("CGST (9%)", labelX, yPos + 25);
+        doc.text(`Rs ${cgst.toFixed(2)}`, priceX, yPos + 25, {
+          align: "right",
+          width: priceWidth,
+        });
+
+        doc.text("SGST (9%)", labelX, yPos + 40);
+        doc.text(`Rs ${sgst.toFixed(2)}`, priceX, yPos + 40, {
+          align: "right",
+          width: priceWidth,
+        });
+      } else {
+        // IGST (18%)
+        doc.text("IGST (18%)", labelX, yPos + 32); // Centered if only one tax line
+        doc.text(`Rs ${gstAmount.toFixed(2)}`, priceX, yPos + 32, {
+          align: "right",
+          width: priceWidth,
+        });
+      }
+
+      // Total row with bold font
+      doc.font("Helvetica-Bold");
+      doc.text("Total Amount", labelX, yPos + 55);
+      doc.text(`Rs ${total.toFixed(2)}`, priceX, yPos + 55, {
+        align: "right",
+        width: priceWidth,
+      });
+    }
+
+    // Add Platform Fee Invoice as a separate page - FLIPKART STYLE
+    if (platformFee) {
+      doc.addPage();
       
-      // Set up page event to add footer to each page
-      doc.on('pageAdded', addFooter);
-      
-      doc.font("Helvetica");
+      // Add logo again on the platform fee page
       try {
-        const logoUrl = "https://i.postimg.cc/K8ftVqFJ/Rigs-Docklogo.png";
         const logoResponse = await axios.get(logoUrl, {
           responseType: "arraybuffer",
         });
@@ -815,195 +1244,417 @@ exports.generateInvoice = async (req, res) => {
       } catch (logoError) {
         console.error("Error loading logo:", logoError);
       }
+
       doc
         .fontSize(16)
-        .fillColor(colors.text)
-        .text("TAX INVOICE", 300, 60, { align: "right" })
+        .fillColor(colors.platformFeeHighlight)
+        .text("PLATFORM FEE INVOICE", 300, 60, { align: "right" })
         .moveDown(0.5);
+
       doc
         .fontSize(10)
         .fillColor(colors.gray)
         .text("Original for Recipient", 300, 80, { align: "right" })
         .moveDown(1);
-      // Seller & Invoice Details
+
+      // Seller & Invoice Details for platform fee
       doc.fillColor(colors.text).fontSize(9);
+
       // Create two-column layout for company and invoice details
       doc
-        .text("Seller Details", 50, 120)
+        .text("Service Provider", 50, 120)
         .text("Invoice Details", 350, 120)
         .moveDown(0.5);
+
+      // RigsDock information as service provider
       doc
-        .font("Helvetica-Bold")
-        .text("Company Name Pvt. Ltd.", 50, 140)
-        .font("Helvetica")
-        .text("Corporate Address", 50, 155)
-        .text("GSTIN: 07AAPCS1234A1Z1", 50, 170)
-        .text("State Code: 07", 50, 185);
+      .font("Helvetica-Bold")
+      .text("RigsDock Pvt. Ltd.", 50, 140)
+      .font("Helvetica")
+      .text("GSTIN: 32EJQPK8494B1ZV", 50, 155) // Keep GSTIN as it's important for tax
+      .text("State: Kerala", 50, 170); // Keep state as it's needed for tax calculation
+
       doc
-        .text(`Invoice No: ${invoiceResponse.invoice.invoice_number}`, 350, 140)
+        .text(
+          `Invoice No: ${invoiceResponse.invoice.invoice_number}-PF`,
+          350,
+          140
+        )
         .text(`Date: ${new Date().toLocaleDateString()}`, 350, 155)
-        .text(`Order ID: ${orderId}`, 350, 170)
-        .text(`State: ${order.shippingAddress.state}`, 350, 185);
+        .text(`Order ID: ${mainOrderId}`, 350, 170)
+        .text(`State: Karnataka`, 350, 185);
+
       // QR Code
       doc.image(qrCodeDataUrl, 500, 120, {
         width: 70,
         height: 70,
       });
-      // Billing Address
+
+      // Billing Address reused from first order
+      const shippingAddress = orders[0].shippingAddress || {};
+      const shippingAddressData = shippingAddress._doc || shippingAddress;
+      const firstName = shippingAddressData.firstName || "Customer";
+      const lastName = shippingAddressData.lastName || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+
       doc
         .fontSize(9)
+        .font("Helvetica-Bold")
         .text("Billing Address:", 50, 210, { underline: true })
-        .text(`${order.shippingAddress.fullName}`, 50, 225)
-        .text(`${order.shippingAddress.addressLine1}`, 50, 240)
+        .font("Helvetica")
+        .text(fullName, 50, 225)
+        .text(`${shippingAddress.addressLine1 || ""}`, 50, 240)
+        .text(`${shippingAddress.addressLine2 || ""}`, 50, 255)
         .text(
-          `${order.shippingAddress.city}, ${order.shippingAddress.state}`,
-          50,
-          255
-        )
-        .text(
-          `${order.shippingAddress.country} - ${order.shippingAddress.zipCode}`,
+          `${shippingAddress.city || ""}, ${
+            shippingAddress.state || ""
+          }`,
           50,
           270
-        );
-      // Warranty Message Box
-      doc.rect(350, 210, 220, 60).fillAndStroke(colors.warningBox, colors.border);
+        )
+        .text(
+          `${shippingAddress.country || ""} - ${
+            shippingAddress.zipCode || ""
+          }`,
+          50,
+          285
+        )
+        .text(`Phone: ${shippingAddress.phone || "N/A"}`, 50, 300);
+
+      // Platform fee explanation box
+      doc
+        .rect(350, 210, 220, 60)
+        .fillAndStroke(colors.warningBox, colors.border);
       doc
         .fontSize(9)
         .fillColor(colors.text)
         .font("Helvetica-Bold")
-        .text("*Keep this invoice and", 370, 220)
-        .text("manufacturer box for", 370, 235)
-        .text("warranty purposes.", 370, 250);
-      // Line Items Table
+        .text("Platform Fee Explanation:", 370, 225)
+        .font("Helvetica")
+        .text("This fee is for services provided", 370, 240)
+        .text("by RigsDock marketplace platform.", 370, 255);
+
+      // Platform Fee Table
       const tableTop = 320;
-      const columnWidths = [40, 250, 80, 60, 100];
+      const columnWidths = [35, 290, 70, 45, 90]; // Adjusted for better alignment
+      const rowHeight = 25;
       const headers = [
         "S.No",
-        "Product Description",
-        "HSN",
+        "Service Description",
+        "SAC",
         "Quantity",
         "Total Amount",
       ];
-      // Draw Table Header
+
+      // Draw Table Header with platform fee color
       doc.lineWidth(0.5).strokeColor(colors.border);
+      doc
+        .rect(50, tableTop - 5, 530, 25)
+        .fillAndStroke(colors.platformFeeHighlight, colors.border);
+
       headers.forEach((header, i) => {
         doc
           .font("Helvetica-Bold")
+          .fillColor("#FFFFFF")
           .text(
             header,
             50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
             tableTop,
             {
               width: columnWidths[i],
-              align: "center",
+              align:
+                i === 0 || i === 3
+                  ? "center"
+                  : i === 1
+                  ? "left"
+                  : i === 4
+                  ? "right"
+                  : "center",
             }
           );
       });
-      // Draw horizontal line under header
-      doc
-        .moveTo(50, tableTop + 15)
-        .lineTo(550, tableTop + 15)
-        .stroke();
-      // Line Items
+
+      // Calculate platform fee amount
+      const totalOrderAmount = orders.reduce((sum, order) => {
+        return sum + order.items.reduce(
+          (itemSum, item) => itemSum + (item.product.finalPrice * item.quantity),
+          0
+        );
+      }, 0);
+      
+      const platformFeeAmount = platformFee.feeType === "fixed" 
+        ? platformFee.amount 
+        : (totalOrderAmount * platformFee.amount / 100);
+
+      // Add platform fee line item
       let yPos = tableTop + 25;
-      doc.font("Helvetica");
-      order.items.forEach((item, index) => {
-        const rowData = [
-          index + 1,
-          item.product.name,
-          item.product.sku || "N/A",
-          item.quantity,
-          `Rs ${(item.product.finalPrice * item.quantity).toFixed(2)}`,
-        ];
-        rowData.forEach((data, i) => {
-          doc.text(
-            data.toString(),
-            50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
-            yPos,
-            {
-              width: columnWidths[i],
-              align: i === 0 || i === 2 || i === 3 ? "center" : "left",
-            }
-          );
-        });
-        // Draw horizontal line
-        doc
-          .moveTo(50, yPos + 15)
-          .lineTo(550, yPos + 15)
-          .strokeColor(colors.border)
-          .stroke();
-        yPos += 20;
-      });
-      const subtotal = order.items.reduce(
-        (sum, item) => sum + item.product.finalPrice * item.quantity,
-        0
-      );
-      const gst = subtotal * 0.18;
-      const total = subtotal + gst;
+      doc.font("Helvetica").fillColor(colors.text);
+
+      // Platform fee row
       doc
-        .font("Helvetica")
-        .fontSize(9)
-        .fillColor(colors.text)
-        .text("Subtotal", 350, yPos + 10)
-        .text(`Rs ${subtotal.toFixed(2)}`, 500, yPos + 10, { align: "right" })
-        .text("GST (18%)", 350, yPos + 25)
-        .text(`Rs ${gst.toFixed(2)}`, 500, yPos + 25, { align: "right" })
-        .font("Helvetica-Bold")
-        .text("Total Amount", 350, yPos + 40)
-        .text(`Rs ${total.toFixed(2)}`, 500, yPos + 40, { align: "right" });
-      
-      // Add authentication section
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(9)
-        .text("For Company Name Pvt. Ltd.", 400, 650, { align: "center" })
-        .moveDown(3.5)
-        .font("Helvetica")
-        .text("Authorized Signatory", 400, 680, { align: "center" });
-      
-     
-        try {
-            const signatureResponse = await axios.get(signatureUrl, {
-              responseType: "arraybuffer",
-            });
-            const signatureBuffer = Buffer.from(signatureResponse.data, "binary");
-            doc.image(signatureBuffer, 420, 700, { width: 80, height: 40 }); // Adjusted position and size
-          } catch (signatureError) {
-            console.error("Error loading signature:", signatureError);
+        .rect(50, yPos - 5, 530, rowHeight)
+        .fillColor("#F9F9F9")
+        .fill();
+      doc.fillColor(colors.text);
+
+      const platformFeeDescription = platformFee.feeType === "fixed"
+        ? "RigsDock Platform Service Fee (Fixed)"
+        : `RigsDock Platform Service Fee (${platformFee.amount}% of order value)`;
+
+      const rowData = [
+        1,
+        platformFeeDescription,
+        "9997", // SAC code for e-commerce services
+        1,
+        `Rs ${platformFeeAmount.toFixed(2)}`,
+      ];
+
+      rowData.forEach((data, i) => {
+        doc.text(
+          data.toString(),
+          50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0),
+          yPos,
+          {
+            width: columnWidths[i],
+            align:
+              i === 0 || i === 3
+                ? "center"
+                : i === 1
+                ? "left"
+                : i === 4
+                ? "right"
+                : "center",
           }
-          
-      // Add footer to the first page
-      addFooter();
-      
-      doc.end();
-      await new Promise((resolve, reject) => {
-        writeStream.on("finish", resolve);
-        writeStream.on("error", reject);
+        );
       });
-      // Response remains the same
-      res.status(201).json({
-        message: "Invoice created successfully",
-        zohoInvoice: invoiceResponse,
-        pdfUrl: invoiceUrl,
-        qrCode: qrCodeDataUrl,
-        orderDetails: {
-          orderId: order._id,
-          totalAmount: total,
-          customer: order.shippingAddress,
-          items: order.items.map((item) => ({
-            productName: item.product.name,
-            quantity: item.quantity,
-            price: item.product.finalPrice,
-            total: item.product.finalPrice * item.quantity,
-          })),
-        },
+
+      // Draw horizontal line between rows
+      doc
+        .moveTo(50, yPos + rowHeight - 2)
+        .lineTo(550, yPos + rowHeight - 2)
+        .strokeColor(colors.border)
+        .stroke();
+
+      yPos += rowHeight + 10;
+
+      // Tax calculation for platform fee
+      const gstRate = 0.18; // 18% GST rate
+      const platformFeeTax = platformFeeAmount * gstRate;
+      const platformFeeTotal = platformFeeAmount + platformFeeTax;
+
+      const priceWidth = 90;
+      const labelX = 360;
+      const priceX = 450;
+
+      // Add box around totals section
+      doc
+        .rect(350, yPos + 5, 200, 80)
+        .fillAndStroke("#F9F9F9", colors.border);
+
+      // Left-align labels and right-align amounts
+      doc.font("Helvetica").fontSize(9).fillColor(colors.text);
+
+      // Subtotal row
+      doc.text("Subtotal", labelX, yPos + 10);
+      doc.text(`Rs ${platformFeeAmount.toFixed(2)}`, priceX, yPos + 10, {
+        align: "right",
+        width: priceWidth,
       });
-    } catch (error) {
-      console.error("❌ Invoice Generation Error:", error);
-      res.status(500).json({
-        error: "Invoice generation failed",
-        message: error.message,
-        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+
+      // Assume platform fee is intra-state (CGST+SGST)
+      const cgst = platformFeeTax / 2;
+      const sgst = platformFeeTax / 2;
+
+      doc.text("CGST (9%)", labelX, yPos + 25);
+      doc.text(`Rs ${cgst.toFixed(2)}`, priceX, yPos + 25, {
+        align: "right",
+        width: priceWidth,
       });
+
+      doc.text("SGST (9%)", labelX, yPos + 40);
+      doc.text(`Rs ${sgst.toFixed(2)}`, priceX, yPos + 40, {
+        align: "right",
+        width: priceWidth,
+      });
+
+      // Total row with bold font
+      doc.font("Helvetica-Bold");
+      doc.text("Total Amount", labelX, yPos + 55);
+      doc.text(`Rs ${platformFeeTotal.toFixed(2)}`, priceX, yPos + 55, {
+        align: "right",
+        width: priceWidth,
+      });
+
+      // Add a note explaining the platform fee
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .fillColor(colors.gray)
+        .text(
+          "Note: This is a separate invoice for the RigsDock platform services fee. This fee is charged for facilitating the transaction between buyers and sellers on our marketplace platform.",
+          50,
+          yPos + 100,
+          {
+            width: 500,
+            align: "left",
+          }
+        );
     }
-  };
+
+  
+   const pageWidth = doc.page.width;
+   const pageHeight = doc.page.height;
+   const footerHeight = 50;
+   const signatureHeight = 80;
+   const signatureY = pageHeight - footerHeight - signatureHeight;
+
+   doc.y = signatureY;
+
+   // Add authentication section on last page only
+   doc
+     .font("Helvetica-Bold")
+     .fontSize(9)
+     .text("For RigsDock Pvt. Ltd.", pageWidth - 180, signatureY, {
+       width: 140,
+       align: "left",
+     });
+
+   doc.moveDown(1);
+
+   try {
+     const signatureResponse = await axios.get(signatureUrl, {
+       responseType: "arraybuffer",
+     });
+     const signatureBuffer = Buffer.from(signatureResponse.data, "binary");
+
+     // Move signature image slightly more left than text
+     doc.image(signatureBuffer, pageWidth - 170, signatureY + 15, {
+       width: 80,
+       height: 40,
+     });
+   } catch (signatureError) {
+     console.error("Error loading signature:", signatureError);
+   }
+
+   // Add "Authorized Signatory" slightly more left than signature
+   doc
+     .font("Helvetica")
+     .text("Authorized Signatory", pageWidth - 160, signatureY + 60, {
+       width: 120,
+       align: "left",
+     });
+
+   // Add footer
+   addFooter();
+
+   // End the PDF document
+   doc.end();
+
+   // Wait for the PDF to be written to disk
+   await new Promise((resolve, reject) => {
+     writeStream.on("finish", resolve);
+     writeStream.on("error", reject);
+   });
+
+   // Calculate grand total for all orders with proper tax breakdown
+   const grandTotal = orders.reduce((total, order) => {
+     const orderSubtotal = order.items.reduce(
+       (sum, item) => sum + item.product.finalPrice * item.quantity,
+       0
+     );
+     return total + orderSubtotal * 1.18; // Including GST
+   }, 0);
+
+   // Calculate platform fee for grand total
+   let platformFeeAmount = 0;
+   let platformFeeTax = 0;
+   if (platformFee) {
+     platformFeeAmount = platformFee.feeType === "fixed" 
+       ? platformFee.amount 
+       : (grandTotal * platformFee.amount / 100);
+     platformFeeTax = platformFeeAmount * 0.18; // 18% GST on platform fee
+   }
+
+   // Add platform fee to grand total
+   const finalGrandTotal = grandTotal + platformFeeAmount + platformFeeTax;
+
+   // Format order details for response with tax breakdown
+   const orderDetails = orders.map((order) => {
+     const subtotal = order.items.reduce(
+       (sum, item) => sum + item.product.finalPrice * item.quantity,
+       0
+     );
+     const taxType = determineTaxType(
+       order.shippingAddress.state,
+       order.items[0].product.owner.state
+     );
+     const gstAmount = subtotal * 0.18;
+
+     let taxBreakdown;
+     if (taxType === "intra-state") {
+       taxBreakdown = {
+         cgst: gstAmount / 2,
+         sgst: gstAmount / 2,
+         igst: 0,
+       };
+     } else {
+       taxBreakdown = {
+         cgst: 0,
+         sgst: 0,
+         igst: gstAmount,
+       };
+     }
+
+     return {
+       orderId: order._id,
+       vendorName: order.items[0].product.owner.businessname,
+       subtotal: subtotal,
+       taxType: taxType,
+       taxBreakdown: taxBreakdown,
+       totalAmount: subtotal + gstAmount,
+       customer: order.shippingAddress,
+       items: order.items.map((item) => ({
+         productName: item.product.name,
+         quantity: item.quantity,
+         price: item.product.finalPrice,
+         total: item.product.finalPrice * item.quantity,
+       })),
+     };
+   });
+
+   // Include platform fee details in response
+   let platformFeeDetails = null;
+   if (platformFee) {
+     platformFeeDetails = {
+       feeType: platformFee.feeType,
+       amount: platformFee.feeType === "fixed" ? platformFee.amount : `${platformFee.amount}%`,
+       calculatedAmount: platformFeeAmount,
+       taxBreakdown: {
+         cgst: platformFeeTax / 2,
+         sgst: platformFeeTax / 2,
+         igst: 0,
+       },
+       totalWithTax: platformFeeAmount + platformFeeTax
+     };
+   }
+
+   // Send response
+   res.status(201).json({
+     message: "Invoice created successfully",
+     zohoInvoice: invoiceResponse,
+     pdfUrl: invoiceUrl,
+     qrCode: qrCodeDataUrl,
+     mainOrderId,
+     grandTotal: finalGrandTotal,
+     orderDetails,
+     platformFee: platformFeeDetails
+   });
+ } catch (error) {
+   console.error("❌ Invoice Generation Error:", error);
+   res.status(500).json({
+     error: "Invoice generation failed",
+     message: error.message,
+     stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+   });
+ }
+};

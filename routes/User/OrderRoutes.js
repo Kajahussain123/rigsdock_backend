@@ -14,9 +14,11 @@ router.get("/:orderId", orderController.getOrderById);
 // Update order status
 router.patch("/:orderId", orderController.updateOrderStatus);
 
-router.get("/:orderId/invoice", orderController.generateInvoice);
+router.get("/:mainOrderId/invoice", orderController.generateInvoiceForMainOrder); 
 
 router.post('/phonepe-webhook', orderController.phonepeWebhook);
+
+router.get("/main/:mainOrderId", orderController.getOrdersByMainOrderId);
 
 // Check payment status
 router.get('/payment-status/:orderId', orderController.checkPaymentStatus);
