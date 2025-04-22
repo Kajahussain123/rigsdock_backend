@@ -3,6 +3,7 @@ const router = express.Router();
 const vendorController = require('../../../controllers/Admin/Vendor/VendorController');
 const verifyToken = require('../../../middleware/jwt');
 const multerConfig = require('../../../middleware/multer');
+const gstVerificationController = require('../../../controllers/Admin/Vendor/GSTVerificationController')
 
 const uploadFields = multerConfig.fields([
     { name: "images", maxCount: 5 },
@@ -43,5 +44,20 @@ router.get('/profile/pending',verifyToken(['Admin']),vendorController.getUpdateP
 
 //search vendor
 router.patch('/profile/:vendorId/update',verifyToken(['Admin']),vendorController.handleVendorUpdateReq);
+
+router.get('/reports', vendorController.getVendorMonthlyReport);
+
+router.post(
+    "/verifygst",
+    verifyToken(["Admin"]),
+    uploadFields,
+    gstVerificationController.verifyGSTPost
+  );
+  router.get(
+    "/verifygst",
+    verifyToken(["Admin"]),
+    gstVerificationController.verifyGSTGet
+  );
+
 
 module.exports = router;

@@ -713,11 +713,12 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
 
     const getTaxId = (taxType) => {
       if (taxType === "intra-state") {
-        return "2463553000000082173"; // GST18 (specific for intra-state)
+        return "2520220000000033193"; // GST18 (new intra-state)
       } else {
-        return "2463553000000082071"; // IGST18 (specific for inter-state)
+        return "2520220000000033091"; // IGST18 (new inter-state)
       }
     };
+    
     
     
     let customerId = user.zohoCustomerId;
@@ -852,12 +853,18 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
       console.log("\n===== AVAILABLE TAX IDS =====");
       // You can fetch this from your Zoho API or hardcode the values from paste-2.txt
       const taxes = [
-        { id: "2463553000000064031", name: "CGST", percentage: 9 },
-        { id: "2463553000000064049", name: "CGST + SGST", percentage: 18 },
-        { id: "2463553000000064043", name: "IGST", percentage: 18 },
-        { id: "2463553000000082071", name: "IGST18", percentage: 18 }
-        // Add more as needed
+        { id: "2520220000000033175", name: "GST0", percentage: 0 },
+        { id: "2520220000000033187", name: "GST12", percentage: 12 },
+        { id: "2520220000000033193", name: "GST18", percentage: 18 },
+        { id: "2520220000000033199", name: "GST28", percentage: 28 },
+        { id: "2520220000000033181", name: "GST5", percentage: 5 },
+        { id: "2520220000000033085", name: "IGST0", percentage: 0 },
+        { id: "2520220000000033089", name: "IGST12", percentage: 12 },
+        { id: "2520220000000033091", name: "IGST18", percentage: 18 },
+        { id: "2520220000000033093", name: "IGST28", percentage: 28 },
+        { id: "2520220000000033087", name: "IGST5", percentage: 5 }
       ];
+      
       
       taxes.forEach(tax => {
         console.log(`${tax.name} (${tax.percentage}%): ${tax.id}`);
@@ -895,17 +902,15 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
       autoFirstPage: true,
     });
 
-    const invoiceDir = path.join(__dirname, "invoices");
-    if (!fs.existsSync(invoiceDir)) {
-      fs.mkdirSync(invoiceDir, { recursive: true });
-    }
+    const invoiceDir = path.join(__dirname, "uploads"); // directly into /uploads
+if (!fs.existsSync(invoiceDir)) {
+  fs.mkdirSync(invoiceDir, { recursive: true });
+}
 
-    const invoiceFileName = `invoice-${mainOrderId}-${Date.now()}.pdf`;
-    const invoicePath = path.join(invoiceDir, invoiceFileName);
-    const invoiceUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/invoices/${invoiceFileName}`;
-    const upiId = "yourupiid@bank";       // Your UPI ID
+const invoiceFileName = `invoice-${mainOrderId}-${Date.now()}.pdf`;
+const invoicePath = path.join(invoiceDir, invoiceFileName);
+const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileName}`;
+    const upiId = "yourupiid@bank";       
     const payeeName = "Your Name";         // Your name or company name
     const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&cu=INR`;
     // Generate QR Code

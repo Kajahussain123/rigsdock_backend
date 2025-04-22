@@ -2,6 +2,9 @@ const Vendor = require('../../../models/Vendor/vendorModel');
 const fs = require('fs');
 const path = require('path');
 const Order = require('../../../models/User/OrderModel')
+const PlatformFee = require('../../../models/admin/PlatformFeeModel');
+
+const moment = require("moment");
 
 //create new vendor
 exports.createVendor = async (req, res) => {
@@ -42,6 +45,82 @@ exports.createVendor = async (req, res) => {
         res.status(500).json({ message: "Internal Server Error", error: error.message });
     }
 };
+
+exports.getVendorMonthlyReport = async (req, res) => {
+    const { month, vendorId } = req.query;
+
+    if (!month) {
+        return res.status(400).json({ message: "Please provide a month in YYYY-MM format" });
+    }
+
+    const [year, monthIndex] = month.split("-");
+    const startDate = new Date(`${year}-${monthIndex}-01`);
+    const endDate = new Date(startDate);
+    endDate.setMonth(endDate.getMonth() + 1); // Next month
+
+    try {
+        // Build query
+        const query = {
+            createdAt: { $gte: startDate, $lt: endDate }
+        };
+        
+        if (vendorId) {
+            query.vendor = vendorId;
+        }
+
+        const orders = await Order.find(query)
+            .populate("user")
+            .populate({
+                path: "items.product",
+                populate: [
+                    { path: "owner", model: "Vendor" },
+                    { path: "category", model: "Category" }
+                ]
+            });
+
+        if (!orders.length) {
+            return res.status(404).json({ message: "No orders found for the given criteria" });
+        }
+
+        const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
+        const platformFee = platformFeeData?.amount || 0;
+
+        const ordersWithStats = orders.map(order => {
+            const itemsWithCommission = order.items.map(item => {
+                const commissionPercentage = item.product?.category?.commissionPercentage || 0;
+                const commissionAmount = (item.price * commissionPercentage) / 100;
+                const vendorAmount = item.price - commissionAmount;
+
+                return {
+                    ...item.toObject(),
+                    commissionPercentage,
+                    commissionAmount,
+                    vendorAmount
+                };
+            });
+
+            const totalCommission = itemsWithCommission.reduce((sum, i) => sum + i.commissionAmount, 0);
+            const totalVendorAmount = itemsWithCommission.reduce((sum, i) => sum + i.vendorAmount, 0);
+
+            return {
+                ...order.toObject(),
+                platformFee,
+                totalCommission,
+                totalVendorAmount,
+                items: itemsWithCommission
+            };
+        });
+
+        res.status(200).json({
+            message: "Monthly vendor report generated",
+            totalOrders: orders.length,
+            report: ordersWithStats
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error generating report", error: error.message });
+    }
+};
+
 
 //get all vendors
 exports.getAllVendors = async(req,res) => {
