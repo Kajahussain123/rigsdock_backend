@@ -15,8 +15,8 @@ const path = require("path");
 const Vendor = require("../../../models/Vendor/vendorModel");
 
 // get all order by vendor id
-exports.getAllOrders = async(req,res) => {
-    try {
+exports.getAllOrders = async (req, res) => {
+  try {
     // Find all products owned by the logged-in vendor
     const vendorProducts = await Product.find({ owner: req.user.id }).select("_id");
     console.log(vendorProducts)
@@ -42,35 +42,35 @@ exports.getAllOrders = async(req,res) => {
     const platformFee = platformFeeData?.amount || 0;
 
     const processedOrders = orders
-            .map(order => {
-                // Filter items to include only vendor's products
-                const filteredItems = order.items.filter(item => 
-                    productIds.some(id => id.toString() === item.product._id.toString())
-                );
+      .map(order => {
+        // Filter items to include only vendor's products
+        const filteredItems = order.items.filter(item =>
+          productIds.some(id => id.toString() === item.product._id.toString())
+        );
 
-                // Calculate order totals
-                const itemsTotal = filteredItems.reduce(
-                    (total, item) => total + (item.price * item.quantity), 0
-                );
-                const finalTotal = itemsTotal + platformFee;
+        // Calculate order totals
+        const itemsTotal = filteredItems.reduce(
+          (total, item) => total + (item.price * item.quantity), 0
+        );
+        const finalTotal = itemsTotal + platformFee;
 
-                return {
-                    ...order.toObject(),
-                    items: filteredItems,
-                    itemsTotal,
-                    platformFee,
-                    finalTotalPrice: finalTotal
-                };
-            })
-            // Remove orders with no items after filtering
-            .filter(order => order.items.length > 0);
+        return {
+          ...order.toObject(),
+          items: filteredItems,
+          itemsTotal,
+          platformFee,
+          finalTotalPrice: finalTotal
+        };
+      })
+      // Remove orders with no items after filtering
+      .filter(order => order.items.length > 0);
 
-        res.status(200).json({ 
-            message: "Orders fetched successfully",
-            total: processedOrders.length,
-            platformFee,
-            orders: processedOrders
-        });
+    res.status(200).json({
+      message: "Orders fetched successfully",
+      total: processedOrders.length,
+      platformFee,
+      orders: processedOrders
+    });
   } catch (error) {
     console.error(error);
     res.status(500).send({ error: "An error occurred while fetching orders." });
@@ -120,66 +120,66 @@ exports.getOrderById = async (req, res) => {
 };
 
 
-exports.updateOrderStatus = async(req,res) => {
-    try {
-        const { orderStatus } = req.body;
-        const { orderId } = req.params;
-        if (!orderStatus) {
-            return res.status(400).json({ message: "orderStatus is required" });
-        }
-        const updatedOrder = await Order.findByIdAndUpdate(orderId,{orderStatus},{ new: true });
-        if(!updatedOrder){
-            return res.status(404).json({ message: "order status not updated" });
-        }
-        res.status(200).json({ message: "order status updated", updatedOrder });
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating order status', error:error.message })
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    const { orderStatus } = req.body;
+    const { orderId } = req.params;
+    if (!orderStatus) {
+      return res.status(400).json({ message: "orderStatus is required" });
     }
+    const updatedOrder = await Order.findByIdAndUpdate(orderId, { orderStatus }, { new: true });
+    if (!updatedOrder) {
+      return res.status(404).json({ message: "order status not updated" });
+    }
+    res.status(200).json({ message: "order status updated", updatedOrder });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating order status', error: error.message })
+  }
 }
 
 exports.generateVendorInvoice = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await Order.findById(orderId)
-    .populate({
-      path: "items.product",
-      populate: [
-        { path: "owner" },
-        { path: "category" }
-      ]
-    })
-    .populate("shippingAddress")
-    .populate("user");
+      .populate({
+        path: "items.product",
+        populate: [
+          { path: "owner" },
+          { path: "category" }
+        ]
+      })
+      .populate("shippingAddress")
+      .populate("user");
 
-  if (!order) {
-    return res.status(404).json({ error: "Order not found" });
-  }
-  
-  // Extract vendor ID from the order if it exists
-  const vendorId = order.vendor || order.items[0]?.product?.owner?._id?.toString();
-  
-  if (!vendorId) {
-    return res.status(400).json({ error: "Could not identify vendor for this order" });
-  }
-  
-  console.log("Vendor ID:", vendorId);
-  console.log("Order ID:", orderId);
-  
-  // Debug info for each item
-  order.items.forEach((item, index) => {
-    console.log(`Item ${index} product owner ID:`, item.product?.owner?._id?.toString());
-    console.log(`Item ${index} matches vendor:`, item.product?.owner?._id?.toString() === vendorId);
-  });
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
 
-  // Filter items for the current vendor only
-  const vendorItems = order.items.filter(item => {
-    const itemOwnerId = item.product?.owner?._id;
-    return itemOwnerId && itemOwnerId.equals(vendorId);
-  });
-  
-  if (vendorItems.length === 0) {
-    return res.status(404).json({ error: "No products from this vendor in the order" });
-  }
+    // Extract vendor ID from the order if it exists
+    const vendorId = order.vendor || order.items[0]?.product?.owner?._id?.toString();
+
+    if (!vendorId) {
+      return res.status(400).json({ error: "Could not identify vendor for this order" });
+    }
+
+    console.log("Vendor ID:", vendorId);
+    console.log("Order ID:", orderId);
+
+    // Debug info for each item
+    order.items.forEach((item, index) => {
+      console.log(`Item ${index} product owner ID:`, item.product?.owner?._id?.toString());
+      console.log(`Item ${index} matches vendor:`, item.product?.owner?._id?.toString() === vendorId);
+    });
+
+    // Filter items for the current vendor only
+    const vendorItems = order.items.filter(item => {
+      const itemOwnerId = item.product?.owner?._id;
+      return itemOwnerId && itemOwnerId.equals(vendorId);
+    });
+
+    if (vendorItems.length === 0) {
+      return res.status(404).json({ error: "No products from this vendor in the order" });
+    }
 
     // Get vendor details
     const vendor = await Vendor.findById(vendorId);
@@ -188,13 +188,13 @@ exports.generateVendorInvoice = async (req, res) => {
     }
 
     // ================ ZOHO BOOKS INTEGRATION START ================
-    
+
     // Tax type determination function (same as in user invoice)
     const determineTaxType = (buyerState, sellerState) => {
       // Convert states to lowercase for comparison
       buyerState = (buyerState || "").toLowerCase().trim();
       sellerState = (sellerState || "").toLowerCase().trim();
-    
+
       // If both in same state, use CGST+SGST (intra-state)
       if (!buyerState || !sellerState || buyerState === sellerState) {
         return "intra-state";
@@ -224,18 +224,16 @@ exports.generateVendorInvoice = async (req, res) => {
         // Create customer in Zoho
         const shippingAddress = order.shippingAddress;
         const customerData = {
-          contact_name: `${
-            shippingAddress?.firstName?.trim() || "Customer"
-          } (${Date.now()})`,
+          contact_name: `${shippingAddress?.firstName?.trim() || "Customer"
+            } (${Date.now()})`,
           company_name: order.user.company || shippingAddress.firstName,
           email: order.user.email,
           phone: shippingAddress.phone,
           contact_type: "customer",
           customer_sub_type: "business",
           billing_address: {
-            attention: `${shippingAddress?.firstName?.trim() || ""} ${
-              shippingAddress?.lastName?.trim() || ""
-            }`.trim(),
+            attention: `${shippingAddress?.firstName?.trim() || ""} ${shippingAddress?.lastName?.trim() || ""
+              }`.trim(),
             address: shippingAddress.addressLine1 || "Default Address",
             address_line2: shippingAddress.addressLine2 || "",
             city: shippingAddress.city,
@@ -245,7 +243,7 @@ exports.generateVendorInvoice = async (req, res) => {
             phone: shippingAddress.phone || order.user.mobileNumber || "+0000000000",
           },
         };
-        
+
         try {
           const newCustomer = await createCustomer(customerData);
           customerId = newCustomer.contact_id;
@@ -253,9 +251,8 @@ exports.generateVendorInvoice = async (req, res) => {
           await order.user.save();
         } catch (customerError) {
           // Retry with a unique name if there's a collision
-          customerData.contact_name = `${
-            shippingAddress.firstName?.trim() || "Customer"
-          } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
+          customerData.contact_name = `${shippingAddress.firstName?.trim() || "Customer"
+            } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
 
           const retryCustomer = await createCustomer(customerData);
           customerId = retryCustomer.contact_id;
@@ -274,16 +271,15 @@ exports.generateVendorInvoice = async (req, res) => {
           description: item.product.description || "",
           sku: item.product.sku || `SKU-${item.product._id}`,
         };
-        
+
         try {
           const newProduct = await createProductInZoho(productData);
           item.product.zohoItemId = newProduct.item_id;
           await item.product.save();
         } catch (productError) {
           // Retry with a unique name
-          productData.name = `${
-            item.product.name
-          } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
+          productData.name = `${item.product.name
+            } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
           const retryProduct = await createProductInZoho(productData);
           item.product.zohoItemId = retryProduct.item_id;
           await item.product.save();
@@ -294,13 +290,13 @@ exports.generateVendorInvoice = async (req, res) => {
     // Tax debugging info (optional, can be removed in production)
     const debugTaxInfo = () => {
       console.log("===== VENDOR TAX DEBUGGING INFO =====");
-      
+
       for (const item of vendorItems) {
         const buyerState = order.shippingAddress.state || "";
         const sellerState = vendor.state || "";
-        
+
         const taxType = determineTaxType(buyerState, sellerState);
-        
+
         console.log(`Order ID: ${orderId}`);
         console.log(`Product: ${item.product.name}`);
         console.log(`Buyer State: "${buyerState}"`);
@@ -308,10 +304,10 @@ exports.generateVendorInvoice = async (req, res) => {
         console.log(`Tax Type: ${taxType}`);
         console.log("----------------------------");
       }
-      
+
       console.log("=============================");
     };
-    
+
     // Call tax debug function
     debugTaxInfo();
 
@@ -320,7 +316,7 @@ exports.generateVendorInvoice = async (req, res) => {
       order.shippingAddress.state,
       vendor.state
     );
-    
+
     const lineItems = vendorItems.map(item => ({
       item_id: item.product.zohoItemId,
       name: item.product.name,
@@ -360,15 +356,16 @@ exports.generateVendorInvoice = async (req, res) => {
       autoFirstPage: true,
     });
 
+    // Create uploads directory if it doesn't exist
     const uploadDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-// Generate vendor invoice filename and path
-const invoiceFileName = `vendor-invoice-${orderId}-${vendorId}-${Date.now()}.pdf`;
-const invoicePath = path.join(uploadDir, invoiceFileName);
-const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileName}`;  
-    
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    // Generate vendor invoice filename and path
+    const invoiceFileName = `vendor-invoice-${orderId}-${vendorId}-${Date.now()}.pdf`;
+    const invoicePath = path.join(uploadDir, invoiceFileName);
+    const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileName}`;
+
     const writeStream = fs.createWriteStream(invoicePath);
     doc.pipe(writeStream);
 
@@ -449,10 +446,10 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
       .text(`State: ${vendor.state || "Pending"}`, 50, 185);
 
     // Invoice details
-    const invoiceNumber = invoiceResponse.invoice ? 
-      invoiceResponse.invoice.invoice_number : 
+    const invoiceNumber = invoiceResponse.invoice ?
+      invoiceResponse.invoice.invoice_number :
       `VND-${orderId.slice(-6)}-${Date.now().toString().slice(-6)}`;
-      
+
     doc
       .text(`Invoice No: ${invoiceNumber}`, 350, 140)
       .text(`Date: ${new Date().toLocaleDateString()}`, 350, 155)
@@ -530,10 +527,10 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
               i === 0 || i === 3
                 ? "center"
                 : i === 1
-                ? "left"
-                : i === 4
-                ? "right"
-                : "center",
+                  ? "left"
+                  : i === 4
+                    ? "right"
+                    : "center",
           }
         );
     });
@@ -573,10 +570,10 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
               i === 0 || i === 3
                 ? "center"
                 : i === 1
-                ? "left"
-                : i === 4
-                ? "right"
-                : "center",
+                  ? "left"
+                  : i === 4
+                    ? "right"
+                    : "center",
           }
         );
       });
@@ -680,12 +677,12 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
     doc
       .rect(50, yPos, 530, 80)
       .fillAndStroke(colors.warningBox, colors.border);
-    
+
     doc
       .font("Helvetica-Bold")
       .fillColor(colors.text)
       .text("COMMISSION BREAKDOWN", 50 + 10, yPos + 10);
-    
+
     doc
       .font("Helvetica")
       .text("• Commission is calculated at 5% of the total order value before taxes.", 50 + 10, yPos + 25);
@@ -750,7 +747,7 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
     });
 
     // Prepare response data
-    const taxBreakdown = taxType === "intra-state" 
+    const taxBreakdown = taxType === "intra-state"
       ? { cgst: gstAmount / 2, sgst: gstAmount / 2, igst: 0 }
       : { cgst: 0, sgst: 0, igst: gstAmount };
 

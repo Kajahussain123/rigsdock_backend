@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const Order = require('../../../models/User/OrderModel')
 const PlatformFee = require('../../../models/admin/PlatformFeeModel');
+const cron = require('node-cron')
 
 const moment = require("moment");
 
@@ -47,79 +48,660 @@ exports.createVendor = async (req, res) => {
 };
 
 exports.getVendorMonthlyReport = async (req, res) => {
+  const { month, vendorId } = req.query;
+
+  if (!month) {
+    return res
+      .status(400)
+      .json({ message: "Please provide a month in YYYY-MM format" });
+  }
+
+  const [year, monthIndex] = month.split("-");
+  const startDate = new Date(`${year}-${monthIndex}-01`);
+  const endDate = new Date(startDate);
+  endDate.setMonth(endDate.getMonth() + 1);
+
+  try {
+    // Build query
+    const query = {
+      createdAt: { $gte: startDate, $lt: endDate },
+    };
+
+    if (vendorId) {
+      query.vendor = vendorId;
+    }
+
+    const orders = await Order.find(query)
+      .populate("user")
+      .populate("shippingAddress") // <-- Add this line to populate the full address
+      .populate({
+        path: "items.product",
+        populate: [
+          { path: "owner", model: "Vendor" },
+          { path: "category", model: "Category" },
+        ],
+      });
+
+    if (!orders.length) {
+      return res
+        .status(404)
+        .json({ message: "No orders found for the given criteria" });
+    }
+
+    const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
+    const platformFee = platformFeeData?.amount || 0;
+
+    const ordersWithStats = orders.map((order) => {
+      const itemsWithCommission = order.items.map((item) => {
+        const commissionPercentage =
+          item.product?.category?.commissionPercentage || 0;
+        const commissionAmount = (item.price * commissionPercentage) / 100;
+        const vendorAmount = item.price - commissionAmount;
+
+        return {
+          ...item.toObject(),
+          commissionPercentage,
+          commissionAmount,
+          vendorAmount,
+        };
+      });
+
+      const totalCommission = itemsWithCommission.reduce(
+        (sum, i) => sum + i.commissionAmount,
+        0
+      );
+      const totalVendorAmount = itemsWithCommission.reduce(
+        (sum, i) => sum + i.vendorAmount,
+        0
+      );
+
+      return {
+        ...order.toObject(),
+        platformFee,
+        totalCommission,
+        totalVendorAmount,
+        items: itemsWithCommission,
+      };
+    });
+
+    const responseData = {
+      message: "Monthly vendor report generated",
+      totalOrders: orders.length,
+      report: ordersWithStats,
+    };
+
+    res.status(200).json(responseData);
+
+    // Return the data if the function is called programmatically
+    return responseData;
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error generating report", error: error.message });
+    throw error;
+  }
+};
+
+const generateVendorExcelReport = async (
+  vendorData,
+  month,
+  vendorEmail,
+  vendorName
+) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Monthly Report");
+
+  // Format the month for display (YYYY-MM to Month YYYY)
+  const [year, monthNum] = month.split("-");
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const displayMonth = `${monthNames[parseInt(monthNum) - 1]} ${year}`;
+
+  // Add header with styling
+  worksheet.mergeCells("A1:H1");
+  const titleCell = worksheet.getCell("A1");
+  titleCell.value = `Monthly Sales Report for ${vendorName} - ${displayMonth}`;
+  titleCell.font = { size: 16, bold: true };
+  titleCell.alignment = { horizontal: "center" };
+
+  // Add header row
+  worksheet.addRow([
+    "Order ID",
+    "Customer",
+    "Address",
+    "Product",
+    "Quantity",
+    "Discount (₹)",
+    "Final Price (₹)",
+    "Commission (₹)",
+    "Net Amount (₹)",
+    "Order Status",
+  ]);
+
+  // Style the header row (2nd row because title might be above)
+  worksheet.getRow(2).font = { bold: true };
+  worksheet.getRow(2).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFE0E0E0" },
+  };
+
+  let totalSales = 0;
+  let totalCommission = 0;
+  let totalNetAmount = 0;
+
+  vendorData.report.forEach((order) => {
+    order.items.forEach((item) => {
+      const price = Number(item.product?.price || 0);
+      const finalPrice = Number(
+        item.finalPrice ??
+          item.product?.finalPrice ??
+          item.offer?.finalPrice ??
+          price
+      );
+      const discount = price > finalPrice ? price - finalPrice : 0;
+
+      // Build a single-line full address
+      const addressParts = [
+        order.shippingAddress?.addressLine1,
+        order.shippingAddress?.addressLine2,
+        order.shippingAddress?.city,
+        order.shippingAddress?.state,
+        order.shippingAddress?.zipCode,
+      ];
+      const fullAddress = addressParts.filter(Boolean).join(", ") || "N/A";
+
+      // Customer full name
+      const customerName =
+        `${order.shippingAddress?.firstName || ""} ${
+          order.shippingAddress?.lastName || ""
+        }`.trim() || "N/A";
+
+      worksheet.addRow([
+        order._id || "N/A",
+        customerName,
+        fullAddress,
+        item.product?.name || "Unnamed Product",
+        item.quantity || 0,
+        discount,
+        finalPrice,
+        item.commissionAmount || 0,
+        item.vendorAmount || 0,
+        order.orderStatus || "Unknown",
+      ]);
+
+      totalSales += finalPrice;
+      totalCommission += item.commissionAmount || 0;
+      totalNetAmount += item.vendorAmount || 0;
+    });
+  });
+
+  // Add summary section
+  worksheet.addRow([]);
+  const summaryRow = worksheet.addRow(["Summary", "", "", "", "", "", "", ""]);
+  summaryRow.font = { bold: true };
+  summaryRow.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFF2F2F2" },
+  };
+
+  worksheet.addRow([
+    "Total Orders",
+    vendorData.totalOrders,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
+  worksheet.addRow(["Total Sales (₹)", totalSales, "", "", "", "", "", ""]);
+  worksheet.addRow([
+    "Total Commission (₹)",
+    totalCommission,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
+  worksheet.addRow([
+    "Total Net Amount (₹)",
+    totalNetAmount,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
+
+  // Platform fee info
+  if (vendorData.report[0]?.platformFee) {
+    worksheet.addRow([
+      "Platform Fee (₹)",
+      vendorData.report[0].platformFee,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+  }
+
+  // Set column widths
+  worksheet.columns.forEach((column, index) => {
+    if (index === 2) {
+      // Product name column
+      column.width = 40;
+    } else {
+      column.width = 20;
+    }
+  });
+
+  // Format number columns
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber > 2) {
+      // Skip header rows
+      // Format price columns (5, 6, 7)
+      [5, 6, 7].forEach((colIndex) => {
+        const cell = row.getCell(colIndex);
+        if (typeof cell.value === "number") {
+          cell.numFmt = "₹#,##0.00";
+        }
+      });
+    }
+  });
+
+  // Create the reports directory if it doesn't exist
+  const reportsDir = path.join(__dirname, "../reports");
+  if (!fs.existsSync(reportsDir)) {
+    fs.mkdirSync(reportsDir, { recursive: true });
+  }
+
+  const safeVendorName = vendorName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+  const fileName = `${reportsDir}/${safeVendorName}_report_${month}.xlsx`;
+
+  // Save the workbook
+  await workbook.xlsx.writeFile(fileName);
+  return fileName;
+};
+
+// Configure email transporter
+const configureMailTransporter = () => {
+  console.log(
+    "Attempting to configure email with user:",
+    process.env.EMAIL_USER
+  );
+  // Don't log the full password, just confirm it exists
+  console.log("Password available:", process.env.EMAIL_PASS ? "Yes" : "No");
+  // Add this near the start of your application
+  console.log("Email environment variables loaded:", {
+    EMAIL_USER: process.env.EMAIL_USER ? "✅" : "❌",
+    EMAIL_PASS: process.env.EMAIL_PASS ? "✅" : "❌",
+    // Don't log the actual values for security reasons
+  });
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // Use SSL
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    debug: true,
+  });
+};
+// Function to send email with Excel attachment
+const sendReportByEmail = async (filePath, vendorEmail, vendorName, month) => {
+  try {
+    const transporter = configureMailTransporter();
+
+    // Format the month for display (YYYY-MM to Month YYYY)
+    const [year, monthNum] = month.split("-");
+    const monthNames = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    const displayMonth = `${monthNames[parseInt(monthNum) - 1]} ${year}`;
+
+    const mailOptions = {
+      from: `"Rigsdock E-Commerce Platform" <${process.env.EMAIL_USER}>`,
+      to: vendorEmail,
+      subject: `Monthly Sales Report - ${displayMonth}`,
+      html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #f8f9fa; padding: 20px; text-align: center;">
+                        <h2 style="color: #333;">Monthly Sales Report</h2>
+                        <p style="font-size: 18px;">${displayMonth}</p>
+                    </div>
+                    <div style="padding: 20px;">
+                        <p>Dear ${vendorName},</p>
+                        <p>Please find   your monthly sales report for ${displayMonth}.</p>
+                        <p>This report includes all orders processed during this period, along with commission calculations and your net earnings.</p>
+                        <p>Thank you for your continued partnership.</p>
+                        <p>Best regards,<br>Rigsdock E-Commerce Platform Team</p>
+                    </div>
+                    <div style="background-color: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666;">
+                        <p>This is an automated message. Please do not reply to this email.</p>
+                    </div>
+                </div>
+            `,
+      attachments: [
+        {
+          filename: `${vendorName}_Monthly_Report_${displayMonth}.xlsx`,
+          path: filePath,
+        },
+      ],
+    };
+
+    return await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("Email sending error:", error);
+    if (
+      error.message.includes("invalid_grant") ||
+      error.message.includes("Invalid login")
+    ) {
+      console.error("Authentication error - check your email credentials");
+    }
+    throw error;
+  }
+};
+
+// Controller to generate and send report for a specific vendor
+exports.generateAndSendVendorReport = async (req, res) => {
+  try {
     const { month, vendorId } = req.query;
 
-    if (!month) {
-        return res.status(400).json({ message: "Please provide a month in YYYY-MM format" });
+    if (!month || !vendorId) {
+      return res
+        .status(400)
+        .json({ message: "Please provide month and vendorId" });
     }
 
-    const [year, monthIndex] = month.split("-");
-    const startDate = new Date(`${year}-${monthIndex}-01`);
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + 1); // Next month
-
-    try {
-        // Build query
-        const query = {
-            createdAt: { $gte: startDate, $lt: endDate }
-        };
-        
-        if (vendorId) {
-            query.vendor = vendorId;
-        }
-
-        const orders = await Order.find(query)
-            .populate("user")
-            .populate({
-                path: "items.product",
-                populate: [
-                    { path: "owner", model: "Vendor" },
-                    { path: "category", model: "Category" }
-                ]
-            });
-
-        if (!orders.length) {
-            return res.status(404).json({ message: "No orders found for the given criteria" });
-        }
-
-        const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
-        const platformFee = platformFeeData?.amount || 0;
-
-        const ordersWithStats = orders.map(order => {
-            const itemsWithCommission = order.items.map(item => {
-                const commissionPercentage = item.product?.category?.commissionPercentage || 0;
-                const commissionAmount = (item.price * commissionPercentage) / 100;
-                const vendorAmount = item.price - commissionAmount;
-
-                return {
-                    ...item.toObject(),
-                    commissionPercentage,
-                    commissionAmount,
-                    vendorAmount
-                };
-            });
-
-            const totalCommission = itemsWithCommission.reduce((sum, i) => sum + i.commissionAmount, 0);
-            const totalVendorAmount = itemsWithCommission.reduce((sum, i) => sum + i.vendorAmount, 0);
-
-            return {
-                ...order.toObject(),
-                platformFee,
-                totalCommission,
-                totalVendorAmount,
-                items: itemsWithCommission
-            };
-        });
-
-        res.status(200).json({
-            message: "Monthly vendor report generated",
-            totalOrders: orders.length,
-            report: ordersWithStats
-        });
-    } catch (error) {
-        res.status(500).json({ message: "Error generating report", error: error.message });
+    // Get vendor details
+    const vendor = await Vendor.findById(vendorId);
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendor not found" });
     }
+
+    // Create a proper mock response object
+    let reportData;
+    const mockRes = {
+      status: () => mockRes,
+      json: (data) => {
+        reportData = data;
+        return mockRes;
+      },
+    };
+
+    // Get report data
+    await exports.getVendorMonthlyReport(
+      { query: { month, vendorId } },
+      mockRes
+    );
+
+    if (!reportData || !reportData.totalOrders) {
+      return res.status(404).json({
+        message: "No orders found for this vendor in the specified month",
+      });
+    }
+
+    // Generate Excel report
+    const vendorName = vendor.businessname || vendor.ownername;
+    const excelFilePath = await generateVendorExcelReport(
+      reportData,
+      month,
+      vendor.email,
+      vendorName
+    );
+
+    // Send email with report
+    await sendReportByEmail(excelFilePath, vendor.email, vendorName, month);
+
+    // Delete file after sending (optional)
+    fs.unlinkSync(excelFilePath);
+
+    res.status(200).json({
+      message: "Report generated and sent successfully",
+      vendor: vendorName,
+      email: vendor.email,
+      month: month,
+    });
+  } catch (error) {
+    console.error("Error generating and sending report:", error);
+    res.status(500).json({
+      message: "Error generating and sending report",
+      error: error.message,
+    });
+  }
 };
+
+// Controller to generate and send reports for all vendors
+exports.sendMonthlyReportsToAllVendors = async (req, res) => {
+  try {
+    const { month } = req.query; // Format: YYYY-MM
+
+    if (!month) {
+      return res
+        .status(400)
+        .json({ message: "Please provide a month in YYYY-MM format" });
+    }
+
+    // Get all active vendors
+    const vendors = await Vendor.find({ status: "approved" });
+
+    if (!vendors.length) {
+      return res.status(404).json({ message: "No active vendors found" });
+    }
+
+    const results = [];
+
+    // Process each vendor
+    for (const vendor of vendors) {
+      try {
+        // Create a proper mock response object for each vendor
+        let reportData;
+        const mockRes = {
+          status: () => mockRes,
+          json: (data) => {
+            reportData = data;
+            return mockRes;
+          },
+        };
+
+        // Get vendor's report data
+        await exports.getVendorMonthlyReport(
+          { query: { month, vendorId: vendor._id } },
+          mockRes
+        );
+
+        // If there are orders for this vendor
+        if (reportData && reportData.totalOrders > 0) {
+          // Generate Excel report
+          const vendorName = vendor.businessname || vendor.ownername;
+          const excelFilePath = await generateVendorExcelReport(
+            reportData,
+            month,
+            vendor.email,
+            vendorName
+          );
+
+          // Send email with report
+          await sendReportByEmail(
+            excelFilePath,
+            vendor.email,
+            vendorName,
+            month
+          );
+
+          results.push({
+            vendorId: vendor._id,
+            vendorName: vendorName,
+            email: vendor.email,
+            status: "success",
+            message: "Report generated and sent successfully",
+            ordersProcessed: reportData.totalOrders,
+          });
+
+          // Delete file after sending
+          fs.unlinkSync(excelFilePath);
+        } else {
+          results.push({
+            vendorId: vendor._id,
+            vendorName: vendor.businessname || vendor.ownername,
+            email: vendor.email,
+            status: "skipped",
+            message: "No orders found for this period",
+          });
+        }
+      } catch (vendorError) {
+        results.push({
+          vendorId: vendor._id,
+          vendorName: vendor.businessname || vendor.ownername,
+          email: vendor.email,
+          status: "error",
+          message: vendorError.message,
+        });
+      }
+    }
+
+    res.status(200).json({
+      message: "Monthly reports processed successfully",
+      month: month,
+      totalVendors: vendors.length,
+      results,
+    });
+  } catch (error) {
+    console.error("Error processing monthly reports:", error);
+    res.status(500).json({
+      message: "Error processing reports",
+      error: error.message,
+    });
+  }
+};
+
+const setupReportScheduler = () => {
+  // Run on the first day of each month at midnight
+  cron.schedule("0 0 1 * *", async () => {
+    try {
+      console.log("Running scheduled monthly report generation...");
+
+      // Use previous month for production reports
+      const now = new Date();
+      now.setMonth(now.getMonth() - 1); // Get previous month
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const reportMonth = `${year}-${month}`;
+
+      console.log(`Generating reports for month: ${reportMonth}`);
+
+      // Get all active vendors
+      const vendors = await Vendor.find({ status: "approved" });
+      console.log(`Found ${vendors.length} active vendors`);
+
+      let successCount = 0;
+      let errorCount = 0;
+      let skippedCount = 0;
+
+      for (const vendor of vendors) {
+        try {
+          // Create a proper mock response object for each vendor
+          let reportData;
+          const mockRes = {
+            status: () => mockRes,
+            json: (data) => {
+              reportData = data;
+              return mockRes;
+            },
+          };
+
+          // Get vendor's report data
+          await exports.getVendorMonthlyReport(
+            { query: { month: reportMonth, vendorId: vendor._id } },
+            mockRes
+          );
+
+          // Only generate and send if there's data
+          if (reportData && reportData.totalOrders > 0) {
+            // Generate Excel report
+            const vendorName = vendor.businessname || vendor.ownername;
+            const excelFilePath = await generateVendorExcelReport(
+              reportData,
+              reportMonth,
+              vendor.email,
+              vendorName
+            );
+
+            // Send email with report
+            await sendReportByEmail(
+              excelFilePath,
+              vendor.email,
+              vendorName,
+              reportMonth
+            );
+
+            console.log(
+              `Monthly report sent to ${vendor.email} (${vendorName})`
+            );
+            successCount++;
+
+            // Delete file after sending
+            fs.unlinkSync(excelFilePath);
+          } else {
+            console.log(
+              `No orders for vendor ${vendor.email} (${
+                vendor.businessname || vendor.ownername
+              }) in ${reportMonth}`
+            );
+            skippedCount++;
+          }
+        } catch (vendorError) {
+          console.error(
+            `Error processing report for vendor ${vendor._id}:`,
+            vendorError
+          );
+          errorCount++;
+        }
+      }
+
+      console.log(
+        `Monthly report generation completed. Success: ${successCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`
+      );
+    } catch (error) {
+      console.error("Error in scheduled report generation:", error);
+    }
+  });
+
+  console.log("Monthly report scheduler initialized");
+};
+setupReportScheduler();
+
 
 
 //get all vendors
