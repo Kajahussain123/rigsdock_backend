@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
-
 const vendorSchema = new mongoose.Schema({
     ownername: {
         type: String,
@@ -26,6 +25,24 @@ const vendorSchema = new mongoose.Schema({
     businesslandmark: {
         type: String,
         required:[true, "business landmark is required"],
+    },
+    isGstVerified: {
+        type: Boolean,
+        default: false
+    },
+    isPanVerified: {
+        type: Boolean,
+        default: false
+    },
+    isBankVerified: {
+        type: Boolean,
+        default: false
+    },
+    gstNumber: {
+        type: String,
+    },
+    panNumber: {
+        type: String,
     },
     number: {
         type: String,
@@ -83,7 +100,7 @@ const vendorSchema = new mongoose.Schema({
         type:String,
     },
     password: {
-        type: String, 
+        type: String,
         required:[true, "password is required"],
         minlength: [6, 'Password must be at least 6 characters long'],
     },
@@ -107,10 +124,10 @@ const vendorSchema = new mongoose.Schema({
             message: "Passbook photo must be a PNG, JPG, or JPEG file",
         }
     },
-    // ratingsAverage: { 
-    //     type: Number,  
-    //     default: 0, 
-    //     min: 0, 
+    // ratingsAverage: {
+    //     type: Number,
+    //     default: 0,
+    //     min: 0,
     //     max: 5
     // },
     role: {
@@ -148,29 +165,29 @@ const vendorSchema = new mongoose.Schema({
     openingTime: {
         type: String,
         enum: [
-            "12:00 AM", "12:30 AM", 
-            "1:00 AM", "1:30 AM", 
-            "2:00 AM", "2:30 AM", 
-            "3:00 AM", "3:30 AM", 
-            "4:00 AM", "4:30 AM", 
-            "5:00 AM", "5:30 AM", 
-            "6:00 AM", "6:30 AM", 
-            "7:00 AM", "7:30 AM", 
-            "8:00 AM", "8:30 AM", 
-            "9:00 AM", "9:30 AM", 
-            "10:00 AM", "10:30 AM", 
-            "11:00 AM", "11:30 AM", 
-            "12:00 PM", "12:30 PM", 
-            "1:00 PM", "1:30 PM", 
-            "2:00 PM", "2:30 PM", 
-            "3:00 PM", "3:30 PM", 
-            "4:00 PM", "4:30 PM", 
-            "5:00 PM", "5:30 PM", 
-            "6:00 PM", "6:30 PM", 
-            "7:00 PM", "7:30 PM", 
-            "8:00 PM", "8:30 PM", 
-            "9:00 PM", "9:30 PM", 
-            "10:00 PM", "10:30 PM", 
+            "12:00 AM", "12:30 AM",
+            "1:00 AM", "1:30 AM",
+            "2:00 AM", "2:30 AM",
+            "3:00 AM", "3:30 AM",
+            "4:00 AM", "4:30 AM",
+            "5:00 AM", "5:30 AM",
+            "6:00 AM", "6:30 AM",
+            "7:00 AM", "7:30 AM",
+            "8:00 AM", "8:30 AM",
+            "9:00 AM", "9:30 AM",
+            "10:00 AM", "10:30 AM",
+            "11:00 AM", "11:30 AM",
+            "12:00 PM", "12:30 PM",
+            "1:00 PM", "1:30 PM",
+            "2:00 PM", "2:30 PM",
+            "3:00 PM", "3:30 PM",
+            "4:00 PM", "4:30 PM",
+            "5:00 PM", "5:30 PM",
+            "6:00 PM", "6:30 PM",
+            "7:00 PM", "7:30 PM",
+            "8:00 PM", "8:30 PM",
+            "9:00 PM", "9:30 PM",
+            "10:00 PM", "10:30 PM",
             "11:00 PM", "11:30 PM"
         ],
         required: [true, "Opening time is required"]
@@ -178,29 +195,29 @@ const vendorSchema = new mongoose.Schema({
     closingTime: {
         type: String,
         enum: [
-            "12:00 AM", "12:30 AM", 
-            "1:00 AM", "1:30 AM", 
-            "2:00 AM", "2:30 AM", 
-            "3:00 AM", "3:30 AM", 
-            "4:00 AM", "4:30 AM", 
-            "5:00 AM", "5:30 AM", 
-            "6:00 AM", "6:30 AM", 
-            "7:00 AM", "7:30 AM", 
-            "8:00 AM", "8:30 AM", 
-            "9:00 AM", "9:30 AM", 
-            "10:00 AM", "10:30 AM", 
-            "11:00 AM", "11:30 AM", 
-            "12:00 PM", "12:30 PM", 
-            "1:00 PM", "1:30 PM", 
-            "2:00 PM", "2:30 PM", 
-            "3:00 PM", "3:30 PM", 
-            "4:00 PM", "4:30 PM", 
-            "5:00 PM", "5:30 PM", 
-            "6:00 PM", "6:30 PM", 
-            "7:00 PM", "7:30 PM", 
-            "8:00 PM", "8:30 PM", 
-            "9:00 PM", "9:30 PM", 
-            "10:00 PM", "10:30 PM", 
+            "12:00 AM", "12:30 AM",
+            "1:00 AM", "1:30 AM",
+            "2:00 AM", "2:30 AM",
+            "3:00 AM", "3:30 AM",
+            "4:00 AM", "4:30 AM",
+            "5:00 AM", "5:30 AM",
+            "6:00 AM", "6:30 AM",
+            "7:00 AM", "7:30 AM",
+            "8:00 AM", "8:30 AM",
+            "9:00 AM", "9:30 AM",
+            "10:00 AM", "10:30 AM",
+            "11:00 AM", "11:30 AM",
+            "12:00 PM", "12:30 PM",
+            "1:00 PM", "1:30 PM",
+            "2:00 PM", "2:30 PM",
+            "3:00 PM", "3:30 PM",
+            "4:00 PM", "4:30 PM",
+            "5:00 PM", "5:30 PM",
+            "6:00 PM", "6:30 PM",
+            "7:00 PM", "7:30 PM",
+            "8:00 PM", "8:30 PM",
+            "9:00 PM", "9:30 PM",
+            "10:00 PM", "10:30 PM",
             "11:00 PM", "11:30 PM"
         ],
         required: [true, "Closing time is required"]
@@ -210,13 +227,11 @@ const vendorSchema = new mongoose.Schema({
         required: [true, "country field is required"]
     },
 },{ timestamps: true });
-
 vendorSchema.pre('save',async function(next){
     if(this.isModified('password')){
         this.password = await bcrypt.hash(this.password,10);
     }
     next();
 })
-
 const vendor = mongoose.model('Vendor',vendorSchema);
 module.exports = vendor;

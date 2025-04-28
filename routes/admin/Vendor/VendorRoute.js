@@ -3,7 +3,8 @@ const router = express.Router();
 const vendorController = require('../../../controllers/Admin/Vendor/VendorController');
 const verifyToken = require('../../../middleware/jwt');
 const multerConfig = require('../../../middleware/multer');
-const gstVerificationController = require('../../../controllers/Admin/Vendor/GSTVerificationController')
+const gstVerificationController = require("../../../controllers/Admin/Vendor/GSTVerificationController");
+const { panController, bankController } = require('../../../controllers/Admin/Vendor/VerificationController');
 
 const uploadFields = multerConfig.fields([
     { name: "images", maxCount: 5 },
@@ -48,16 +49,37 @@ router.patch('/profile/:vendorId/update',verifyToken(['Admin']),vendorController
 router.get('/reports', vendorController.getVendorMonthlyReport);
 
 router.post(
-    "/verifygst",
-    verifyToken(["Admin"]),
-    uploadFields,
-    gstVerificationController.verifyGSTPost
-  );
-  router.get(
-    "/verifygst",
-    verifyToken(["Admin"]),
-    gstVerificationController.verifyGSTGet
-  );
+  "/verifygst",
+  verifyToken(["Admin"]),
+  uploadFields,
+  gstVerificationController.verifyGSTPost
+);
+router.get(
+  "/verifygst",
+  verifyToken(["Admin"]),
+  gstVerificationController.verifyGSTGet
+);
+router.get(
+  "/verifypan",
+  verifyToken(["Admin"]),
+  panController.verifyPANGet
+);
+router.post(
+  "/verifypan",
+  verifyToken(["Admin"]),
+  panController.verifyPANPost
+);
+// Bank account verification routes
+router.get(
+  "/verifyaccount",
+  verifyToken(["Admin"]),
+  bankController.verifyBankAccountGet
+);
+router.post(
+  "/verifyaccount",
+  verifyToken(["Admin"]),
+  bankController.verifyBankAccountPost
+);
 
 
 module.exports = router;
