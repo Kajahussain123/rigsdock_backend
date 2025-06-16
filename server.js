@@ -9,7 +9,7 @@ app.use(cors({
     'http://localhost:3000', 
     'https://rigsdock.com',
     'https://www.rigsdock.com',
-    'https://rigsdock.netlify.app/'
+    'https://rigsdock.netlify.app'
   ],
   methods: ['GET','HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
