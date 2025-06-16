@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const nodemailer = require('nodemailer');
 
-const TWO_FACTOR_API_KEY = 'ff7f43b4-15dc-11f0-8b17-0200cd936042';
+const TWO_FACTOR_API_KEY = process.env.TWO_FACTOR_API_KEY;
 
 // Email transporter setup
 const transporter = nodemailer.createTransport({
