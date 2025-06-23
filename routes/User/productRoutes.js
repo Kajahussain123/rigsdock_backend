@@ -15,11 +15,10 @@ router.get("/search/:query", productController.searchProductsByName);
 
 router.get("/category/:categoryId/products",productController.getProductByCategory)
 
-
+      
 router.get("/filter", productController.getFilteredProducts);
 
 router.get("/filter/brand/:brandName", productController.getProductsByBrand);
-
 
 router.get("/filter/price", productController.getProductsByPriceRange);
 

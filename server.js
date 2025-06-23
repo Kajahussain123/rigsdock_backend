@@ -47,7 +47,7 @@ const tokenRefresh = require("./routes/token/refreshToken");
 // Admin Routes
 const adminAuth = require("./routes/admin/authRoute");
 const adminHomeOffer = require("./routes/admin/HomeOffer/homeOfferRoutes");
-
+const adminBrand = require("./routes/admin/Brand/brandRoute");
 const SubcategoryRoutes = require("./routes/admin/SubCategory/SubCategoryRoute");
 const blogRoutes = require("./routes/admin/Blog/blogRoute");
 const ProductRoutes = require("./routes/admin/Product/ProductRoute");
@@ -95,7 +95,9 @@ const vendorShiprocket = require('./routes/Vendor/Shiprocket/vendorShiprocketRou
 
 // User Routes
 const userAuth = require("./routes/User/authRoutes");
+const userBrand = require("./routes/User/brandRoute")
 const userBlogRoutes = require("./routes/User/blogRoutes")
+const userHomeOfferRoutes = require("./routes/User/homeOfferRoutes")
 const userMainCategoryRoutes = require("./routes/User/mainCategoryRoutes");
 const userCategoryRoutes = require("./routes/User/categoryRoutes");
 const userSubCategoryRoutes = require("./routes/User/subCategoryRoutes");
@@ -118,6 +120,7 @@ app.use("/token", tokenRefresh);
 
 // Admin Routes
 app.use("/api/admin/auth", adminAuth);
+app.use("/api/admin/brand", adminBrand);
 app.use("/api/admin/homeoffer", adminHomeOffer);
 app.use("/api/admin/blog", blogRoutes);
 app.use("/api/admin/subcategory", SubcategoryRoutes);
@@ -167,7 +170,9 @@ app.use("/api/vendor/shiprocket", vendorShiprocket);
 
 // User Routes
 app.use("/api/user/auth", userAuth);
+app.use("/api/user/brand", userBrand)
 app.use("/api/user/blog", userBlogRoutes);
+app.use("/api/user/homeoffer", userHomeOfferRoutes)
 app.use("/api/user/maincategory", userMainCategoryRoutes);
 app.use("/api/user/category", userCategoryRoutes);
 app.use("/api/user/subcategory", userSubCategoryRoutes);
