@@ -46,6 +46,8 @@ const tokenRefresh = require("./routes/token/refreshToken");
 
 // Admin Routes
 const adminAuth = require("./routes/admin/authRoute");
+const adminHomeOffer = require("./routes/admin/HomeOffer/homeOfferRoutes");
+
 const SubcategoryRoutes = require("./routes/admin/SubCategory/SubCategoryRoute");
 const blogRoutes = require("./routes/admin/Blog/blogRoute");
 const ProductRoutes = require("./routes/admin/Product/ProductRoute");
@@ -116,6 +118,7 @@ app.use("/token", tokenRefresh);
 
 // Admin Routes
 app.use("/api/admin/auth", adminAuth);
+app.use("/api/admin/homeoffer", adminHomeOffer);
 app.use("/api/admin/blog", blogRoutes);
 app.use("/api/admin/subcategory", SubcategoryRoutes);
 app.use("/api/admin/product", ProductRoutes);
@@ -249,7 +252,7 @@ cron.schedule("0 * * * *", async () => {
 
 socketHandler(io);
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3006;
 
 server.listen(PORT, () => {
     console.log(`Server started listening at PORT ${PORT}`);
