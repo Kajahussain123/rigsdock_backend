@@ -5,11 +5,11 @@ require("./config/db");
 const path = require("path");
 const app = express();
 app.use(cors({
-  origin: [
+origin: [
     'http://localhost:3000', 
     'https://rigsdock.com',
     'https://www.rigsdock.com',
-    'https://rigsdock.netlify.app'
+    'https://vermillion-beijinho-abb79a.netlify.app',
   ],
   methods: ['GET','HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -249,7 +249,7 @@ cron.schedule("0 * * * *", async () => {
 
 socketHandler(io);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 4000;
 
 server.listen(PORT, () => {
     console.log(`Server started listening at PORT ${PORT}`);
