@@ -1,7 +1,6 @@
 const Offer = require("../../../models/admin/OfferModel");
 const Product = require("../../../models/admin/ProductModel");
 
-// Helper: Calculate discounted price for an offer.
 const applyOfferDiscount = (product, discountType, discountValue) => {
   let discountAmount = 0;
   if (discountType === "percentage") {
@@ -22,6 +21,7 @@ const isOfferValid = (offer) => {
 };
 
 // Create a new offer and apply it (overriding any active deal).
+
 exports.createOffer = async (req, res) => {
   const { name, description, discountType, discountValue, targetType, target, validFrom, validTo } = req.body;
   

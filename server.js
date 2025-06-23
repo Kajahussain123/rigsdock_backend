@@ -47,6 +47,7 @@ const tokenRefresh = require("./routes/token/refreshToken");
 // Admin Routes
 const adminAuth = require("./routes/admin/authRoute");
 const SubcategoryRoutes = require("./routes/admin/SubCategory/SubCategoryRoute");
+const blogRoutes = require("./routes/admin/Blog/blogRoute");
 const ProductRoutes = require("./routes/admin/Product/ProductRoute");
 const CategoryRoutes = require("./routes/admin/categoryRoute");
 const MainCategoryRouter = require("./routes/admin/MainCategory/mainCategoryRoute");
@@ -92,6 +93,7 @@ const vendorShiprocket = require('./routes/Vendor/Shiprocket/vendorShiprocketRou
 
 // User Routes
 const userAuth = require("./routes/User/authRoutes");
+const userBlogRoutes = require("./routes/User/blogRoutes")
 const userMainCategoryRoutes = require("./routes/User/mainCategoryRoutes");
 const userCategoryRoutes = require("./routes/User/categoryRoutes");
 const userSubCategoryRoutes = require("./routes/User/subCategoryRoutes");
@@ -114,6 +116,7 @@ app.use("/token", tokenRefresh);
 
 // Admin Routes
 app.use("/api/admin/auth", adminAuth);
+app.use("/api/admin/blog", blogRoutes);
 app.use("/api/admin/subcategory", SubcategoryRoutes);
 app.use("/api/admin/product", ProductRoutes);
 app.use("/api/admin/category", CategoryRoutes);
@@ -161,6 +164,7 @@ app.use("/api/vendor/shiprocket", vendorShiprocket);
 
 // User Routes
 app.use("/api/user/auth", userAuth);
+app.use("/api/user/blog", userBlogRoutes);
 app.use("/api/user/maincategory", userMainCategoryRoutes);
 app.use("/api/user/category", userCategoryRoutes);
 app.use("/api/user/subcategory", userSubCategoryRoutes);
@@ -245,7 +249,7 @@ cron.schedule("0 * * * *", async () => {
 
 socketHandler(io);
 
-const PORT = process.env.PORT || 3006;
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
     console.log(`Server started listening at PORT ${PORT}`);
