@@ -201,9 +201,72 @@ const getUserProfile = async (req, res) => {
     }
 };
 
+
+const editProfile = async (req, res) => {
+  const { userId } = req.params;
+  const { name, email } = req.body;
+
+  try {
+    // Validate input
+    if (!name && !email) {
+      return res.status(400).json({ 
+        message: 'At least one field (name or email) is required to update' 
+      });
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Prepare update object
+    const updateData = {};
+    
+    if (name) {
+      updateData.name = name.trim();
+    }
+    
+    if (email) {
+      // Validate email format
+      if (!isEmail(email)) {
+        return res.status(400).json({ message: 'Invalid email format' });
+      }
+      
+      // Check if email is already taken by another user
+      const existingUser = await User.findOne({ 
+        email: email.toLowerCase(),
+        _id: { $ne: userId } // Exclude current user
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({ message: 'Email already registered by another user' });
+      }
+      
+      updateData.email = email.toLowerCase();
+    }
+
+    // Update user profile
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.status(200).json({
+      message: 'Profile updated successfully',
+      user: updatedUser
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 module.exports = { 
   sendOTP, 
   verifyOTP, 
   completeRegistration,
-  getUserProfile 
+  getUserProfile,
+  editProfile
 };
