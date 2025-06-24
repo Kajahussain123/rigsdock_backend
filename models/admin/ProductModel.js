@@ -7,7 +7,6 @@ const productSchema = new mongoose.Schema(
     BISCode: { type: String ,required:true},
     HSNCode: { type: String, required:true },
     price: { type: Number, required: true, min: 0 },
-    // finalPrice stores the effective price (updated by deal or offer)
     finalPrice: {
       type: Number,
       default: function () { return this.price; }
@@ -28,7 +27,6 @@ const productSchema = new mongoose.Schema(
         message: "Maximum 5 images allowed",
       },
     },
-    // Only one immediate discount is applied: either an offer or a deal.
     offer: { type: mongoose.Schema.Types.ObjectId, ref: "Offer", default: null },
     deal: { type: mongoose.Schema.Types.ObjectId, ref: "Deal", default: null },
     length: { type: Number, required: true },

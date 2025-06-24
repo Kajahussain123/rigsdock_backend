@@ -18,7 +18,7 @@ router.get("/category/:categoryId/products",productController.getProductByCatego
       
 router.get("/filter", productController.getFilteredProducts);
 
-router.get("/filter/brand/:brandName", productController.getProductsByBrand);
+router.get("/filter/brand/:id", productController.getProductsByBrand);
 
 router.get("/filter/price", productController.getProductsByPriceRange);
 

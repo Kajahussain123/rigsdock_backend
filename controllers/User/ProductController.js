@@ -202,57 +202,41 @@ exports.getProductByCategory = async(req,res) => {
 
 exports.getProductsByBrand = async (req, res) => {
   try {
-    const { brandName } = req.params;
+    // Access the correct parameter name from route /:id
+    const brandId = req.params.id;
 
-    // First, find the brand by name (case-insensitive)
-    const Brand = require("../../models/admin/BrandModel"); // Adjust path as needed
-    const brand = await Brand.findOne({ 
-      name: { $regex: new RegExp(brandName, 'i') } 
-    });
-
-    if (!brand) {
-      return res.status(404).json({ message: "Brand not found" });
+    // Check if brandId exists
+    if (!brandId) {
+      return res.status(400).json({ 
+        message: "Brand ID is required",
+        receivedParams: req.params
+      });
     }
 
-    const products = await Product.find({ brand: brand._id })
+    // Validate brandId format (assuming MongoDB ObjectId)
+    if (typeof brandId !== 'string' || !brandId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ 
+        message: "Invalid brand ID format",
+        received: brandId
+      });
+    }
+
+    const Product = require("../../models/admin/ProductModel");
+
+    const products = await Product.find({ brand: brandId }) 
       .populate("maincategory category subcategory brand")
       .lean();
 
     if (products.length === 0) {
       return res.status(404).json({ 
-        message: `No products found for brand: ${brand.name}` 
+        message: "No products found for this brand" 
       });
     }
 
-    // Add ratings to products
-    const productsWithRatings = await Promise.all(
-      products.map(async (product) => {
-        const reviews = await Review.find({ product: product._id });
-
-        let totalRating = 0;
-        reviews.forEach((review) => {
-          totalRating += review.rating;
-        });
-
-        const totalReviews = reviews.length;
-        const averageRating = totalReviews > 0 ? (totalRating / totalReviews).toFixed(1) : 0;
-
-        return {
-          ...product,
-          averageRating,
-          totalReviews,
-        };
-      })
-    );
-
     res.status(200).json({
       message: "Products filtered by brand successfully",
-      brand: {
-        id: brand._id,
-        name: brand.name
-      },
-      totalProducts: productsWithRatings.length,
-      products: productsWithRatings
+      totalProducts: products.length,
+      products: products
     });
   } catch (error) {
     res.status(500).json({
@@ -261,7 +245,6 @@ exports.getProductsByBrand = async (req, res) => {
     });
   }
 };
-
 
 exports.getProductsByPriceRange = async (req, res) => {
   try {

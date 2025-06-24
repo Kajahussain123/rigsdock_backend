@@ -187,10 +187,10 @@ const completeRegistration = async (req, res) => {
   }
 };
 const getUserProfile = async (req, res) => {
-    const { userId } = req.params; // Extract user ID from URL params
+    const { userId } = req.params; 
 
     try {
-        const user = await User.findById(userId).select('-password'); // Exclude password
+        const user = await User.findById(userId).select('-password');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }

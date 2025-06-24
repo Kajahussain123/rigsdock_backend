@@ -48,6 +48,9 @@ const tokenRefresh = require("./routes/token/refreshToken");
 const adminAuth = require("./routes/admin/authRoute");
 const adminHomeOffer = require("./routes/admin/HomeOffer/homeOfferRoutes");
 const adminBrand = require("./routes/admin/Brand/brandRoute");
+const adminProductCarousel = require("./routes/admin/ProductCarousel/productCarousel");
+const adminHomeCategory = require("./routes/admin/homeCategory/homeCategoryroutes");
+
 const SubcategoryRoutes = require("./routes/admin/SubCategory/SubCategoryRoute");
 const blogRoutes = require("./routes/admin/Blog/blogRoute");
 const ProductRoutes = require("./routes/admin/Product/ProductRoute");
@@ -97,7 +100,9 @@ const vendorShiprocket = require('./routes/Vendor/Shiprocket/vendorShiprocketRou
 const userAuth = require("./routes/User/authRoutes");
 const userBrand = require("./routes/User/brandRoute")
 const userBlogRoutes = require("./routes/User/blogRoutes")
+const userCarouselRoutes = require("./routes/User/ProductCarouselRoutes")
 const userHomeOfferRoutes = require("./routes/User/homeOfferRoutes")
+const userHomeCategoryRoutes = require("./routes/User/homeCategoryRoutes")
 const userMainCategoryRoutes = require("./routes/User/mainCategoryRoutes");
 const userCategoryRoutes = require("./routes/User/categoryRoutes");
 const userSubCategoryRoutes = require("./routes/User/subCategoryRoutes");
@@ -122,6 +127,8 @@ app.use("/token", tokenRefresh);
 app.use("/api/admin/auth", adminAuth);
 app.use("/api/admin/brand", adminBrand);
 app.use("/api/admin/homeoffer", adminHomeOffer);
+app.use("/api/admin/homecategory", adminHomeCategory);
+app.use("/api/admin/productcarousel", adminProductCarousel)
 app.use("/api/admin/blog", blogRoutes);
 app.use("/api/admin/subcategory", SubcategoryRoutes);
 app.use("/api/admin/product", ProductRoutes);
@@ -172,7 +179,9 @@ app.use("/api/vendor/shiprocket", vendorShiprocket);
 app.use("/api/user/auth", userAuth);
 app.use("/api/user/brand", userBrand)
 app.use("/api/user/blog", userBlogRoutes);
+app.use("/api/user/productcarousel", userCarouselRoutes)
 app.use("/api/user/homeoffer", userHomeOfferRoutes)
+app.use("/api/user/homecategory", userHomeCategoryRoutes)
 app.use("/api/user/maincategory", userMainCategoryRoutes);
 app.use("/api/user/category", userCategoryRoutes);
 app.use("/api/user/subcategory", userSubCategoryRoutes);

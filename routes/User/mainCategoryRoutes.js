@@ -6,3 +6,6 @@ const mainCategoryController = require('../../controllers/User/mainCategoryContr
 router.get('/get',mainCategoryController.getMainCategory);
 
 module.exports = router;
+
+
+

@@ -24,20 +24,10 @@ const homeOfferSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
-  targetType: {
-    type: String,
-    enum: ['Product', 'Category', 'SubCategory', 'All'],
-    required: true
-  },
-  target: {
-    type: mongoose.Schema.Types.Mixed, // Can be string, array, or null for 'All' type
-    required: function() {
-      return this.targetType !== 'All';
-    }
-  },
   productIds: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product'
+    ref: 'Product',
+    required: true
   }],
   validFrom: {
     type: Date,
@@ -75,7 +65,7 @@ const homeOfferSchema = new mongoose.Schema({
   },
   isHomeOffer: {
     type: Boolean,
-    default: true // This helps distinguish home offers from other types
+    default: true
   }
 }, {
   timestamps: true
@@ -83,7 +73,6 @@ const homeOfferSchema = new mongoose.Schema({
 
 // Indexes for better query performance
 homeOfferSchema.index({ status: 1, validFrom: 1, validTo: 1 });
-homeOfferSchema.index({ targetType: 1, target: 1 });
 homeOfferSchema.index({ productIds: 1 });
 homeOfferSchema.index({ ownerType: 1, ownerId: 1 });
 homeOfferSchema.index({ isHomeOffer: 1 });
@@ -104,18 +93,12 @@ homeOfferSchema.methods.incrementUsage = function() {
   return this.save();
 };
 
-// Static method to find active offers for a product
-homeOfferSchema.statics.findActiveOffersForProduct = function(productId, category, subcategory) {
+// Static method to find active offers for a specific product
+homeOfferSchema.statics.findActiveOffersForProduct = function(productId) {
   const now = new Date();
   return this.find({
     status: 'active',
-    $or: [
-      { productIds: productId },
-      { target: productId, targetType: 'Product' },
-      { target: category, targetType: 'Category' },
-      { target: subcategory, targetType: 'SubCategory' },
-      { targetType: 'All' }
-    ],
+    productIds: productId,
     $and: [
       { $or: [{ validFrom: { $exists: false } }, { validFrom: { $lte: now } }] },
       { $or: [{ validTo: { $exists: false } }, { validTo: { $gte: now } }] },
@@ -124,8 +107,8 @@ homeOfferSchema.statics.findActiveOffersForProduct = function(productId, categor
   });
 };
 
-// Static method to find active home offers
-homeOfferSchema.statics.findActiveHomeOffers = function() {
+// Static method to find active home offers with product data
+homeOfferSchema.statics.findActiveHomeOffersWithProducts = function() {
   const now = new Date();
   return this.find({
     status: 'active',
@@ -135,7 +118,7 @@ homeOfferSchema.statics.findActiveHomeOffers = function() {
       { $or: [{ validTo: { $exists: false } }, { validTo: { $gte: now } }] },
       { $or: [{ maxUsage: { $exists: false } }, { $expr: { $lt: ['$usageCount', '$maxUsage'] } }] }
     ]
-  });
+  }).populate('productIds', 'name price finalPrice image category subcategory stock description');
 };
 
 // Pre-save middleware to handle image path formatting
@@ -143,6 +126,14 @@ homeOfferSchema.pre('save', function(next) {
   if (this.image && !this.image.startsWith('http')) {
     // Ensure the image path is properly formatted for URL access
     this.image = this.image.replace(/\\/g, '/');
+  }
+  next();
+});
+
+homeOfferSchema.pre('save', function(next) {
+  if (!this.productIds || this.productIds.length === 0) {
+    const error = new Error('At least one product ID is required');
+    return next(error);
   }
   next();
 });

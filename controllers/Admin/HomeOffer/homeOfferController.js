@@ -13,7 +13,6 @@ const applyOfferDiscount = (product, discountType, discountValue) => {
   return Math.max(product.price - discountAmount, 0);
 };
 
-// Helper: Check if an offer is valid
 const isOfferValid = (offer) => {
   const now = new Date();
   if (offer.status !== "active") return false;
@@ -22,7 +21,6 @@ const isOfferValid = (offer) => {
   return true;
 };
 
-// Helper: Delete image file
 const deleteImageFile = (imagePath) => {
   if (imagePath && fs.existsSync(imagePath)) {
     fs.unlinkSync(imagePath);
@@ -37,42 +35,48 @@ exports.createHomeOffer = async (req, res) => {
       description, 
       discountType, 
       discountValue, 
-      targetType, 
-      target, 
+      productIds,
       validFrom, 
       validTo,
-      productIds,
       termsAndConditions
     } = req.body;
     
     // Validation
-    if (!name || !discountType || !discountValue || !targetType) {
+    if (!name || !discountType || !discountValue || !productIds) {
       if (req.file) deleteImageFile(req.file.path);
       return res.status(400).json({ 
         success: false,
-        message: "Missing required fields: name, discountType, discountValue, targetType" 
+        message: "Missing required fields: name, discountType, discountValue, productIds" 
       });
     }
 
-    // Parse productIds if provided
+    // Parse and validate productIds
     let parsedProductIds = [];
-    if (productIds) {
-      try {
-        parsedProductIds = JSON.parse(productIds);
-        if (!Array.isArray(parsedProductIds)) {
-          if (req.file) deleteImageFile(req.file.path);
-          return res.status(400).json({ 
-            success: false,
-            message: "productIds must be an array" 
-          });
-        }
-      } catch (error) {
+    try {
+      parsedProductIds = JSON.parse(productIds);
+      if (!Array.isArray(parsedProductIds) || parsedProductIds.length === 0) {
         if (req.file) deleteImageFile(req.file.path);
         return res.status(400).json({ 
           success: false,
-          message: "Invalid productIds format" 
+          message: "productIds must be a non-empty array" 
         });
       }
+    } catch (error) {
+      if (req.file) deleteImageFile(req.file.path);
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid productIds format" 
+      });
+    }
+
+    // Verify that all products exist
+    const existingProducts = await Product.find({ _id: { $in: parsedProductIds } });
+    if (existingProducts.length !== parsedProductIds.length) {
+      if (req.file) deleteImageFile(req.file.path);
+      return res.status(400).json({ 
+        success: false,
+        message: "One or more products not found" 
+      });
     }
 
     // Create new offer
@@ -81,12 +85,10 @@ exports.createHomeOffer = async (req, res) => {
       description,
       discountType,
       discountValue,
-      targetType,
-      target,
+      productIds: parsedProductIds,
       validFrom,
       validTo,
       image: req.file ? req.file.path : null,
-      productIds: parsedProductIds,
       termsAndConditions,
       ownerType: "admin",
       ownerId: req.user.id
@@ -94,35 +96,18 @@ exports.createHomeOffer = async (req, res) => {
     
     await newOffer.save();
 
-    // Apply offer if valid now
+    // Apply offer discount to products if valid
     if (isOfferValid(newOffer)) {
-      let affectedProducts = [];
-      
-      // If specific product IDs are provided, use them
-      if (newOffer.productIds && newOffer.productIds.length > 0) {
-        affectedProducts = await Product.find({ _id: { $in: newOffer.productIds } });
-      } else {
-        // Otherwise use the target logic
-        if (targetType === "Product") {
-          const productIdArray = Array.isArray(target) ? target : [target];
-          affectedProducts = await Product.find({ _id: { $in: productIdArray } });
-        } else if (targetType === "Category") {
-          affectedProducts = await Product.find({ category: target });
-        } else if (targetType === "SubCategory") {
-          affectedProducts = await Product.find({ subcategory: target });
-        } else if (targetType === "All") {
-          affectedProducts = await Product.find({});
-        }
-      }
-      
-      // Apply discount to affected products
-      for (let product of affectedProducts) {
+      for (let product of existingProducts) {
         product.finalPrice = applyOfferDiscount(product, discountType, discountValue);
         product.offer = newOffer._id;
         product.deal = null; // Clear active deal
         await product.save();
       }
     }
+    
+    // Populate product data for response
+    await newOffer.populate('productIds', 'name price finalPrice image category subcategory stock');
     
     res.status(201).json({ 
       success: true,
@@ -139,20 +124,25 @@ exports.createHomeOffer = async (req, res) => {
   }
 };
 
-// Get all home offers
+// Get all home offers with product data
 exports.getAllHomeOffers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, targetType } = req.query;
+    const { page = 1, limit = 10, status, search } = req.query;
     const query = {};
     
     if (status) query.status = status;
-    if (targetType) query.targetType = targetType;
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
     
     const offers = await Offer.find(query)
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .populate('productIds', 'name price image category subcategory');
+      .populate('productIds', 'name price finalPrice image category subcategory stock description');
       
     const total = await Offer.countDocuments(query);
     
@@ -176,11 +166,11 @@ exports.getAllHomeOffers = async (req, res) => {
   }
 };
 
-// Get home offer by ID
+// Get home offer by ID with product data
 exports.getHomeOfferById = async (req, res) => {
   try {
     const offer = await Offer.findById(req.params.id)
-      .populate('productIds', 'name price image category subcategory');
+      .populate('productIds', 'name price finalPrice image category subcategory stock description');
       
     if (!offer) {
       return res.status(404).json({ 
@@ -212,10 +202,10 @@ exports.updateHomeOffer = async (req, res) => {
       description, 
       discountType, 
       discountValue, 
+      productIds,
       validFrom, 
       validTo, 
       status,
-      productIds,
       termsAndConditions
     } = req.body;
     
@@ -228,10 +218,11 @@ exports.updateHomeOffer = async (req, res) => {
       });
     }
     
-    // Store old image path for deletion if new image is uploaded
+    // Store old product IDs and image path
+    const oldProductIds = [...offer.productIds];
     const oldImagePath = offer.image;
     
-    // Update offer fields
+    // Update basic offer fields
     if (name) offer.name = name;
     if (description) offer.description = description;
     if (discountType) offer.discountType = discountType;
@@ -244,7 +235,26 @@ exports.updateHomeOffer = async (req, res) => {
     // Update productIds if provided
     if (productIds) {
       try {
-        offer.productIds = JSON.parse(productIds);
+        const parsedProductIds = JSON.parse(productIds);
+        if (!Array.isArray(parsedProductIds) || parsedProductIds.length === 0) {
+          if (req.file) deleteImageFile(req.file.path);
+          return res.status(400).json({ 
+            success: false,
+            message: "productIds must be a non-empty array" 
+          });
+        }
+        
+        // Verify products exist
+        const existingProducts = await Product.find({ _id: { $in: parsedProductIds } });
+        if (existingProducts.length !== parsedProductIds.length) {
+          if (req.file) deleteImageFile(req.file.path);
+          return res.status(400).json({ 
+            success: false,
+            message: "One or more products not found" 
+          });
+        }
+        
+        offer.productIds = parsedProductIds;
       } catch (error) {
         if (req.file) deleteImageFile(req.file.path);
         return res.status(400).json({ 
@@ -257,41 +267,38 @@ exports.updateHomeOffer = async (req, res) => {
     // Update image if new one is uploaded
     if (req.file) {
       offer.image = req.file.path;
-      // Delete old image
       if (oldImagePath) deleteImageFile(oldImagePath);
     }
     
     await offer.save();
     
-    // Reapply or revert discount on affected products
-    let affectedProducts = [];
+    // Remove discount from old products that are no longer in the offer
+    const oldProducts = await Product.find({ 
+      _id: { $in: oldProductIds }, 
+      offer: offer._id 
+    });
     
-    // Get products based on productIds or target criteria
-    if (offer.productIds && offer.productIds.length > 0) {
-      affectedProducts = await Product.find({ _id: { $in: offer.productIds } });
-    } else {
-      if (offer.targetType === "Product") {
-        const productIdArray = Array.isArray(offer.target) ? offer.target : [offer.target];
-        affectedProducts = await Product.find({ _id: { $in: productIdArray } });
-      } else if (offer.targetType === "Category") {
-        affectedProducts = await Product.find({ category: offer.target });
-      } else if (offer.targetType === "SubCategory") {
-        affectedProducts = await Product.find({ subcategory: offer.target });
-      } else if (offer.targetType === "All") {
-        affectedProducts = await Product.find({});
+    for (let product of oldProducts) {
+      if (!offer.productIds.includes(product._id)) {
+        product.finalPrice = product.price;
+        product.offer = null;
+        await product.save();
       }
     }
     
-    // Apply or remove discount based on offer validity
+    // Apply or update discount on current products
+    const currentProducts = await Product.find({ _id: { $in: offer.productIds } });
+    
     if (isOfferValid(offer)) {
-      for (let product of affectedProducts) {
+      for (let product of currentProducts) {
         product.finalPrice = applyOfferDiscount(product, offer.discountType, offer.discountValue);
         product.offer = offer._id;
         product.deal = null;
         await product.save();
       }
     } else {
-      for (let product of affectedProducts) {
+      // Remove discount if offer is no longer valid
+      for (let product of currentProducts) {
         if (product.offer && product.offer.toString() === offer._id.toString()) {
           product.finalPrice = product.price;
           product.offer = null;
@@ -299,6 +306,9 @@ exports.updateHomeOffer = async (req, res) => {
         }
       }
     }
+    
+    // Populate product data for response
+    await offer.populate('productIds', 'name price finalPrice image category subcategory stock');
     
     res.status(200).json({ 
       success: true,
@@ -326,28 +336,12 @@ exports.deleteHomeOffer = async (req, res) => {
       });
     }
     
-    let affectedProducts = [];
+    // Remove discount from all affected products
+    const affectedProducts = await Product.find({ 
+      _id: { $in: offer.productIds }, 
+      offer: offer._id 
+    });
     
-    // Get affected products based on productIds or target criteria
-    if (offer.productIds && offer.productIds.length > 0) {
-      affectedProducts = await Product.find({ 
-        _id: { $in: offer.productIds }, 
-        offer: offer._id 
-      });
-    } else {
-      if (offer.targetType === "Product") {
-        const productIdArray = Array.isArray(offer.target) ? offer.target : [offer.target];
-        affectedProducts = await Product.find({ _id: { $in: productIdArray }, offer: offer._id });
-      } else if (offer.targetType === "Category") {
-        affectedProducts = await Product.find({ category: offer.target, offer: offer._id });
-      } else if (offer.targetType === "SubCategory") {
-        affectedProducts = await Product.find({ subcategory: offer.target, offer: offer._id });
-      } else if (offer.targetType === "All") {
-        affectedProducts = await Product.find({ offer: offer._id });
-      }
-    }
-    
-    // Revert pricing on affected products
     for (let product of affectedProducts) {
       product.finalPrice = product.price;
       product.offer = null;
@@ -374,19 +368,9 @@ exports.deleteHomeOffer = async (req, res) => {
   }
 };
 
-// Get active home offers for display
 exports.getActiveHomeOffers = async (req, res) => {
   try {
-    const now = new Date();
-    const activeOffers = await Offer.find({
-      status: 'active',
-      $and: [
-        { $or: [{ validFrom: { $exists: false } }, { validFrom: { $lte: now } }] },
-        { $or: [{ validTo: { $exists: false } }, { validTo: { $gte: now } }] }
-      ]
-    })
-    .populate('productIds', 'name price image category subcategory')
-    .sort({ createdAt: -1 });
+    const activeOffers = await Offer.findActiveHomeOffersWithProducts();
     
     res.status(200).json({
       success: true,
@@ -397,6 +381,28 @@ exports.getActiveHomeOffers = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: "Error fetching active home offers", 
+      error: error.message 
+    });
+  }
+};
+
+// Get offers for a specific product
+exports.getOffersForProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    const offers = await Offer.findActiveOffersForProduct(productId)
+      .populate('productIds', 'name price finalPrice image category subcategory');
+    
+    res.status(200).json({
+      success: true,
+      message: "Product offers retrieved successfully",
+      data: offers
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false,
+      message: "Error fetching product offers", 
       error: error.message 
     });
   }

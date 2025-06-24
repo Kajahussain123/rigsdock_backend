@@ -10,16 +10,12 @@ router.post("/create", verifyToken(["Admin"]), multerConfig.single("image"), hom
 // Get all home offers (with pagination and filtering)
 router.get("/view", homeOfferController.getAllHomeOffers);
 
-// Get home offer by ID
 router.get("/view/:id", homeOfferController.getHomeOfferById);
 
-// Update home offer (Admin only, with optional image update)
 router.patch("/update/:id", verifyToken(["Admin"]), multerConfig.single("image"), homeOfferController.updateHomeOffer);
 
-// Delete home offer (Admin only)
 router.delete("/delete/:id", verifyToken(["Admin"]), homeOfferController.deleteHomeOffer);
 
-// Get active home offers for public display (no auth required)
 router.get("/active", homeOfferController.getActiveHomeOffers);
 
 module.exports = router;
