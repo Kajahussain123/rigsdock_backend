@@ -1,6 +1,7 @@
 const Product = require('../../../models/admin/ProductModel');
 const path = require('path');
 const fs = require('fs');
+const Brand = require('../../../models/admin/BrandModel');
 // const xlsx = require("xlsx");
 
 //create a new product

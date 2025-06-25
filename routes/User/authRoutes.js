@@ -8,7 +8,7 @@ router.post('/send-otp', sendOTP);
 
 // Verify OTP route
 router.post('/verify-otp', verifyOTP);
-router.patch('/profile/:userId', verifyOTP);
+router.patch('/profile/:userId',editProfile);
 
 
 // Register with verified mobile number route
