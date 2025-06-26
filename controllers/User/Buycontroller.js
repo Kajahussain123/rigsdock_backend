@@ -1,7 +1,7 @@
 const Cart = require("../../models/User/CartModel");
 const Product = require("../../models/admin/ProductModel");
 const Order = require("../../models/User/OrderModel");
-const User = require("../../models/User/UserModel");
+const User = require("../../models/User/AuthModel");
 const Coupon = require("../../models/admin/couponModel");
 const PlatformFee = require("../../models/admin/PlatformFeeModel");
 
