@@ -99,6 +99,8 @@ const vendorShiprocket = require('./routes/Vendor/Shiprocket/vendorShiprocketRou
 // User Routes
 const userAuth = require("./routes/User/authRoutes");
 const userBrand = require("./routes/User/brandRoute")
+const userBuy = require("./routes/User/buyRoutes")
+
 const userBlogRoutes = require("./routes/User/blogRoutes")
 const userCarouselRoutes = require("./routes/User/ProductCarouselRoutes")
 const userHomeOfferRoutes = require("./routes/User/homeOfferRoutes")
@@ -179,6 +181,7 @@ app.use("/api/vendor/shiprocket", vendorShiprocket);
 app.use("/api/user/auth", userAuth);
 app.use("/api/user/brand", userBrand)
 app.use("/api/user/blog", userBlogRoutes);
+app.use("/api/user/product/buy", userBuy);
 app.use("/api/user/productcarousel", userCarouselRoutes)
 app.use("/api/user/homeoffer", userHomeOfferRoutes)
 app.use("/api/user/homecategory", userHomeCategoryRoutes)
