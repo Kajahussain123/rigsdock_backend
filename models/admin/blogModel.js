@@ -17,11 +17,6 @@ const blogSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    ownerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      refPath: "ownerrole",
-    },
     status: {
       type: String,
       enum: ["active", "inactive"],
