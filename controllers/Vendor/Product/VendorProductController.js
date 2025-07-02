@@ -2,11 +2,10 @@ const Product = require('../../../models/admin/ProductModel');
 const path = require('path');
 const fs = require('fs');
 const Brand = require('../../../models/admin/BrandModel');
-// const xlsx = require("xlsx");
 
 //create a new product
 exports.createProduct = async (req, res) => {
-  const { name, description, price,finalPrice, BISCode, HSNCode ,stock,brand, subcategory, attributes,category,maincategory,deliveryfee,length,breadth,height,weight } = req.body;
+  const { name, description, price, finalPrice, BISCode, HSNCode, stock, brand, subcategory, attributes, category, maincategory, deliveryfee, length, breadth, height, weight } = req.body;
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "At least one product image is required" });
@@ -45,17 +44,26 @@ exports.createProduct = async (req, res) => {
       height,
       weight
     }
+    
     if (subcategory && subcategory.trim().length > 0) {
       productData.subcategory = subcategory;
     }
-    if(deliveryfee) {
+    if (deliveryfee) {
       productData.deliveryfee = deliveryfee;
     }
+
     const newProduct = new Product(productData);
     await newProduct.save();
+
+    // Different response messages based on user role
+    const responseMessage = req.user.role === 'Admin' 
+      ? "Product created and approved successfully" 
+      : "Product created successfully and is pending admin approval";
+
     res.status(201).json({
-      message: "Product created successfully",
+      message: responseMessage,
       Product: newProduct,
+      status: newProduct.status
     });
   } catch (error) {
     console.error("Error creating product:", error);
@@ -63,40 +71,98 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// get all products
-exports.getProducts = async (req,res) => {
+// get all products (only approved ones for vendors, all for admin)
+exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find({owner: req.user.id}).populate('maincategory').populate('category').populate('subcategory');
-    if(products.length === 0 ){
-      return res.status(400).json({ message: 'No products' });
+    let query = { owner: req.user.id };
+    
+    // If user is not admin, only show approved products
+    if (req.user.role !== 'Admin') {
+      query.status = 'approved';
     }
-    res.status(200).json({ message: "Products fetched successfully",products })
+
+    const products = await Product.find(query)
+      .populate('maincategory')
+      .populate('category')
+      .populate('subcategory');
+      
+    if (products.length === 0) {
+      return res.status(400).json({ message: 'No products found' });
+    }
+    
+    res.status(200).json({ 
+      message: "Products fetched successfully", 
+      products,
+      totalCount: products.length
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching products", error: error.message });
   }
 }
 
 // get product by id
-exports.getProductById = async (req,res) => {
+exports.getProductById = async (req, res) => {
   try {
-    const {id} = req.params;
-    const product = await Product.findById(id);
-    if(!product){
-      return res.status(404).json({ message: 'No product found' });
+    const { id } = req.params;
+    let query = { _id: id };
+    
+    // If user is not admin, only show approved products
+    if (req.user.role !== 'Admin') {
+      query.status = 'approved';
     }
-    res.status(200).json({ message: "Product fetched successfully",product })
+    
+    const product = await Product.findOne(query);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found or not approved' });
+    }
+    res.status(200).json({ message: "Product fetched successfully", product });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching product", error: error.message });
+  }
+}
+
+// Get vendor's own products with status
+exports.getVendorProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ owner: req.user.id })
+      .populate('maincategory')
+      .populate('category')
+      .populate('subcategory')
+      .sort({ createdAt: -1 });
+
+    if (products.length === 0) {
+      return res.status(404).json({ message: 'No products found' });
+    }
+
+    // Group products by status for easier frontend handling
+    const groupedProducts = {
+      approved: products.filter(p => p.status === 'approved'),
+      pending: products.filter(p => p.status === 'pending'),
+      rejected: products.filter(p => p.status === 'rejected')
+    };
+
+    res.status(200).json({
+      message: "Products fetched successfully",
+      products: groupedProducts,
+      totalCount: products.length
+    });
   } catch (error) {
     res.status(500).json({ message: "Error fetching products", error: error.message });
   }
 }
 
 // update product by id
-exports.updateProduct = async(req,res) => {
+exports.updateProduct = async (req, res) => {
   try {
-    const {id} = req.params;
+    const { id } = req.params;
     const product = await Product.findById(id);
-    if(!product){
+    if (!product) {
       return res.status(404).json({ message: 'No product found' });
+    }
+
+    // Check if user has permission to update this product
+    if (req.user.role !== 'Admin' && product.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     // Handle new images
@@ -115,20 +181,22 @@ exports.updateProduct = async(req,res) => {
       subcategory: req.body.subcategory,
     };
 
+    // If vendor updates an approved product, set it back to pending
+    if (req.user.role !== 'Admin' && product.status === 'approved') {
+      updates.status = 'pending';
+      updates.approvedBy = null;
+      updates.approvedAt = null;
+    }
+
     // Handle attributes updates
     if (req.body.attributes) {
-      // Convert existing attributes Map to plain object
       const currentAttributes = Object.fromEntries(
         product.attributes || new Map()
       );
-
-      // Merge existing attributes with new attributes
       const mergedAttributes = {
         ...currentAttributes,
         ...req.body.attributes
       };
-
-      // Convert merged attributes back to Map
       updates.attributes = new Map(Object.entries(mergedAttributes));
     }
 
@@ -146,13 +214,18 @@ exports.updateProduct = async(req,res) => {
       }
     );
 
+    const message = req.user.role === 'Admin' 
+      ? 'Product updated successfully'
+      : updates.status === 'pending' 
+        ? 'Product updated successfully and is pending admin approval'
+        : 'Product updated successfully';
+
     return res.status(200).json({
       success: true,
-      message: 'Product updated successfully',
+      message,
       data: updatedProduct
     });
   } catch (error) {
-    // Handle specific validation errors
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -161,7 +234,6 @@ exports.updateProduct = async(req,res) => {
       });
     }
 
-    // Handle invalid ObjectId format
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
@@ -169,7 +241,6 @@ exports.updateProduct = async(req,res) => {
       });
     }
 
-    // Handle other errors
     return res.status(500).json({
       success: false,
       message: 'Error updating product',
@@ -178,12 +249,17 @@ exports.updateProduct = async(req,res) => {
   }
 }
 
-exports.deleteProduct = async(req,res) => {
+exports.deleteProduct = async (req, res) => {
   try {
-    const {id} = req.params;
+    const { id } = req.params;
     const product = await Product.findById(id);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Check if user has permission to delete this product
+    if (req.user.role !== 'Admin' && product.owner.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied' });
     }
 
     // Delete images
@@ -201,6 +277,7 @@ exports.deleteProduct = async(req,res) => {
     res.status(500).json({ message: "Error deleting product", error: error.message });
   }
 }
+
 
 // Delete a specific image by name
 exports.deleteProductImage = async (req, res) => {

@@ -4,14 +4,14 @@ const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
-    BISCode: { type: String ,required:true},
-    HSNCode: { type: String, required:true },
+    BISCode: { type: String, required: true },
+    HSNCode: { type: String, required: true },
     price: { type: Number, required: true, min: 0 },
     finalPrice: {
       type: Number,
       default: function () { return this.price; }
     },
-    deliveryfee: { type: Number, default:0 },
+    deliveryfee: { type: Number, default: 0 },
     stock: { type: Number, required: true, min: 0 },
     brand: { type: String, required: true },
     maincategory: { type: mongoose.Schema.Types.ObjectId, ref: "MainCategory", required: true },
@@ -33,8 +33,38 @@ const productSchema = new mongoose.Schema(
     breadth: { type: Number, required: true },
     height: { type: Number, required: true },
     weight: { type: Number, required: true },
+    
+    // NEW APPROVAL FIELDS
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: function() {
+        // Auto-approve if added by admin, set pending if added by vendor
+        return this.ownerType === 'Admin' ? 'approved' : 'pending';
+      }
+    },
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null
+    },
+    approvedAt: {
+      type: Date,
+      default: null
+    },
+    rejectionReason: {
+      type: String,
+      default: null
+    },
+    rejectedAt: {
+      type: Date,
+      default: null
+    }
   },
   { timestamps: true }
 );
+
+// Index for efficient querying
+productSchema.index({ status: 1, ownerType: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

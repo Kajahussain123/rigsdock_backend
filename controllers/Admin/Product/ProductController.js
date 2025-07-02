@@ -132,6 +132,243 @@ exports.getProductBySubcategory = async (req, res) => {
   }
 }
 
+
+exports.updateProductStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, rejectionReason } = req.body;
+
+    // Check if user is admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied. Admin privileges required.' 
+      });
+    }
+
+    // Validate status
+    if (!['approved', 'rejected', 'pending'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status. Must be approved, rejected, or pending.'
+      });
+    }
+
+    // If rejecting, rejection reason is required
+    if (status === 'rejected' && (!rejectionReason || rejectionReason.trim().length === 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required when rejecting a product.'
+      });
+    }
+
+    // Find the product
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found.'
+      });
+    }
+
+    // Prepare update object
+    const updateData = {
+      status: status
+    };
+
+    // Handle approval
+    if (status === 'approved') {
+      updateData.approvedBy = req.user.id;
+      updateData.approvedAt = new Date();
+      updateData.rejectionReason = null;
+      updateData.rejectedAt = null;
+    }
+
+    // Handle rejection
+    if (status === 'rejected') {
+      updateData.rejectionReason = rejectionReason.trim();
+      updateData.rejectedAt = new Date();
+      updateData.approvedBy = null;
+      updateData.approvedAt = null;
+    }
+
+    // Handle pending (reset approval/rejection data)
+    if (status === 'pending') {
+      updateData.approvedBy = null;
+      updateData.approvedAt = null;
+      updateData.rejectionReason = null;
+      updateData.rejectedAt = null;
+    }
+
+    // Update the product
+    const updatedProduct = await Product.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).populate('owner', 'name email')
+     .populate('maincategory')
+     .populate('category')
+     .populate('subcategory');
+
+    // Generate response message
+    let message;
+    switch (status) {
+      case 'approved':
+        message = 'Product approved successfully';
+        break;
+      case 'rejected':
+        message = 'Product rejected successfully';
+        break;
+      case 'pending':
+        message = 'Product status reset to pending';
+        break;
+      default:
+        message = 'Product status updated successfully';
+    }
+
+    res.status(200).json({
+      success: true,
+      message: message,
+      product: updatedProduct
+    });
+
+  } catch (error) {
+    console.error('Error updating product status:', error);
+    
+    if (error.name === 'CastError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid product ID format'
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
+// Get all pending products for admin review
+exports.getPendingProducts = async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied. Admin privileges required.' 
+      });
+    }
+
+    const pendingProducts = await Product.find({ 
+      status: 'pending',
+      ownerType: { $ne: 'Admin' } // Exclude admin's own products
+    })
+    .populate('owner', 'name email')
+    .populate('maincategory')
+    .populate('category')
+    .populate('subcategory')
+    .sort({ createdAt: -1 });
+
+    if (pendingProducts.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No pending products found',
+        products: [],
+        totalCount: 0
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Pending products fetched successfully',
+      products: pendingProducts,
+      totalCount: pendingProducts.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching pending products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
+// Get all products with status filter for admin
+exports.getAllProductsWithStatus = async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'Admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Access denied. Admin privileges required.' 
+      });
+    }
+
+    const { status, page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    // Build query
+    let query = {};
+    if (status && ['approved', 'rejected', 'pending'].includes(status)) {
+      query.status = status;
+    }
+
+    const products = await Product.find(query)
+      .populate('owner', 'name email')
+      .populate('maincategory')
+      .populate('category')
+      .populate('subcategory')
+      .populate('approvedBy', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalCount = await Product.countDocuments(query);
+
+    // Group products by status for easier frontend handling
+    const statusCounts = await Product.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const statusSummary = {
+      approved: 0,
+      pending: 0,
+      rejected: 0
+    };
+
+    statusCounts.forEach(item => {
+      statusSummary[item._id] = item.count;
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Products fetched successfully',
+      products: products,
+      totalCount: totalCount,
+      currentPage: parseInt(page),
+      totalPages: Math.ceil(totalCount / limit),
+      statusSummary: statusSummary
+    });
+
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+};
+
 // update product by id
 exports.updateProduct = async (req, res) => {
   try {

@@ -1,8 +1,6 @@
 const Cart = require("../../models/User/CartModel");
 const Product = require("../../models/admin/ProductModel");
-const Order = require("../../models/User/OrderModel");
 const User = require("../../models/User/AuthModel");
-const Coupon = require("../../models/admin/couponModel");
 const PlatformFee = require("../../models/admin/PlatformFeeModel");
 
 
@@ -11,6 +9,11 @@ const PlatformFee = require("../../models/admin/PlatformFeeModel");
 exports.buyNow = async (req, res) => {
     try {
         const { userId, productId, quantity } = req.body;
+
+        // Validate input
+        if (!userId || !productId || !quantity || quantity <= 0) {
+            return res.status(400).json({ message: "Invalid input parameters" });
+        }
 
         // Validate user
         const user = await User.findById(userId);
@@ -24,54 +27,53 @@ exports.buyNow = async (req, res) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
+      
       if (!product.isActive) {
     console.warn(`Product ${productId} is inactive but being purchased`);
 }
 
         if (product.stock < quantity) {
-            return res.status(400).json({ 
-                message: `Insufficient stock. Available: ${product.stock}, Requested: ${quantity}` 
+            return res.status(400).json({
+                message: `Insufficient stock. Available: ${product.stock}, Requested: ${quantity}`
             });
         }
 
-        // Find or create cart (without clearing existing items)
+        // Get the correct price
+        const price = product.finalPrice || product.price;
+
+        // OPTION 1: Clear cart and add only this product (true "Buy Now" behavior)
         let cart = await Cart.findOne({ user: userId });
         if (!cart) {
             cart = new Cart({ user: userId, items: [], totalPrice: 0, platformFee: 0 });
         }
 
-        // Check if the product already exists in the cart
-        const existingItemIndex = cart.items.findIndex(
-            item => item.product.toString() === productId
-        );
+        // Clear existing items for true "Buy Now" behavior
+        cart.items = [];
+        
+        // Add the new product
+        cart.items.push({
+            product: productId,
+            quantity: parseInt(quantity), // Ensure it's a number
+            price: price
+        });
 
-        if (existingItemIndex >= 0) {
-            // Update quantity if product already exists
-            cart.items[existingItemIndex].quantity += quantity;
-        } else {
-            // Add new product to cart
-            const price = product.finalPrice || product.price;
-            cart.items.push({
-                product: productId,
-                quantity,
-                price: price
-            });
-        }
+        // Calculate subtotal
+        const subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        // Recalculate total price
-        cart.totalPrice = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-        // Fetch platform fee config
+        // Calculate platform fee
         const feeConfig = await PlatformFee.findOne();
         let platformFee = 0;
         if (feeConfig) {
-            platformFee = feeConfig.feeType === "fixed"
-                ? feeConfig.amount
-                : (feeConfig.amount / 100) * cart.totalPrice;
+            if (feeConfig.feeType === "fixed") {
+                platformFee = feeConfig.amount;
+            } else if (feeConfig.feeType === "percentage") {
+                platformFee = (feeConfig.amount / 100) * subtotal;
+            }
         }
 
+        // Update cart
         cart.platformFee = platformFee;
-        cart.totalPrice += platformFee;
+        cart.totalPrice = subtotal + platformFee;
 
         await cart.save();
 
@@ -80,14 +82,20 @@ exports.buyNow = async (req, res) => {
 
         res.status(200).json({
             message: "Product added to cart. Proceed to checkout.",
-            cart: populatedCart,
-            buyNow: true // Flag to indicate this is a buy now flow
+            cart: {
+                ...populatedCart.toObject(),
+                subtotal: subtotal,
+                platformFee: platformFee,
+                totalPrice: cart.totalPrice
+            },
+            buyNow: true
         });
 
     } catch (error) {
-        res.status(500).json({ 
-            message: "Error processing buy now", 
-            error: error.message 
+        console.error("Buy now error:", error);
+        res.status(500).json({
+            message: "Error processing buy now",
+            error: error.message
         });
     }
 };

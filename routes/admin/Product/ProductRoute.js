@@ -40,4 +40,6 @@ router.get("/category/:categoryId/products",verifyToken(['Admin']),productContro
 // get product by subcategory
 router.get("/subcategory/:subcategoryId/products",verifyToken(['Admin']),productController.getProductBySubcategory)
 
+router.patch("/status/:id",verifyToken(['Admin']),productController.updateProductStatus)
+
 module.exports = router;

@@ -34,7 +34,7 @@ const createCarousel = async (req, res) => {
     const carousel = new Carousel({
       title,
       subtitle,
-      image: req.file.path || req.file.filename, // Use the file path or filename from multer
+      image: req.file.filename , // Use the file path or filename from multer
       startingPrice,
     });
 
@@ -62,7 +62,7 @@ const updateCarousel = async (req, res) => {
 
     // If a new image file was uploaded, add it to updates
     if (req.file) {
-      updates.image = req.file.path || req.file.filename;
+      updates.image = req.file.filename || req.file.filename;
     }
 
     const carousel = await Carousel.findByIdAndUpdate(
