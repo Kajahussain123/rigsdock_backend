@@ -2,12 +2,12 @@ const Blog = require("../../../models/admin/blogModel");
 
 const createBlog = async (req, res) => {
   try {
-    const { image, title, description, ownerrole, ownerId, status } = req.body;
+    const { image, title, description, ownerrole, status } = req.body;
 
-    if (!image || !description || !ownerrole || !ownerId) {
+    if (!image || !description || !ownerrole) {
       return res.status(400).json({
         success: false,
-        message: "Image, description, owner role, and owner ID are required",
+        message: "Image, description and owner role are required",
       });
     }
 
@@ -16,7 +16,6 @@ const createBlog = async (req, res) => {
       title,
       description,
       ownerrole,
-      ownerId,
       status: status || "active",
     });
 
@@ -36,7 +35,6 @@ const createBlog = async (req, res) => {
   }
 };
 
-
 const getAllBlogs = async (req, res) => {
   try {
     const { page = 1, limit = 10, status, ownerrole, search } = req.query;
@@ -51,7 +49,6 @@ const getAllBlogs = async (req, res) => {
     }
 
     const blogs = await Blog.find(filter)
-      .populate("ownerId")
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -83,7 +80,7 @@ const getBlogById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const blog = await Blog.findById(id).populate("ownerId");
+    const blog = await Blog.findById(id);
 
     if (!blog) {
       return res.status(404).json({
@@ -106,7 +103,6 @@ const getBlogById = async (req, res) => {
   }
 };
 
-// Update blog
 const updateBlog = async (req, res) => {
   try {
     const { id } = req.params;
@@ -119,7 +115,7 @@ const updateBlog = async (req, res) => {
       id,
       updateData,
       { new: true, runValidators: true }
-    ).populate("ownerId");
+    );
 
     if (!updatedBlog) {
       return res.status(404).json({
@@ -168,7 +164,6 @@ const deleteBlog = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   createBlog,
