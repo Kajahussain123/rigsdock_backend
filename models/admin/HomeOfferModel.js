@@ -57,7 +57,7 @@ const homeOfferSchema = new mongoose.Schema({
   },
   maxUsage: {
     type: Number,
-    default: null // null means unlimited
+    default: null 
   },
   termsAndConditions: {
     type: String,

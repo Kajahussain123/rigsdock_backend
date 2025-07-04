@@ -1,21 +1,25 @@
 const multer = require("multer");
+const AWS = require("aws-sdk");
+const multerS3 = require("multer-s3");
 const path = require("path");
-const fs = require("fs");
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const folderPath = path.join(__dirname, "../uploads");
+// Configure AWS - IAM role will be used automatically
+AWS.config.update({
+  region: process.env.AWS_REGION,
+});
 
-    if (!fs.existsSync(folderPath)) {
-      fs.mkdirSync(folderPath, { recursive: true });
-    }
+const s3 = new AWS.S3();
 
-    cb(null, folderPath);
-  },
-  filename: (req, file, cb) => {
-    const filename = `image-${Date.now()}-${file.originalname}`;
+const storage = multerS3({
+  s3: s3,
+  bucket: process.env.S3_BUCKET_NAME,
+  acl: "public-read", // Make files publicly accessible
+  key: (req, file, cb) => {
+    // Generate unique filename
+    const filename = `uploads/image-${Date.now()}-${file.originalname}`;
     cb(null, filename);
   },
+  contentType: multerS3.AUTO_CONTENT_TYPE, // Automatically detect content type
 });
 
 const fileFilter = (req, file, cb) => {
@@ -23,8 +27,8 @@ const fileFilter = (req, file, cb) => {
     "image/jpeg", "image/png", "image/jpg",
     "application/pdf", "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // Added XLSX
-    "application/vnd.ms-excel" // Added XLS
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // XLSX
+    "application/vnd.ms-excel" // XLS
   ];
 
   if (allowedMimeTypes.includes(file.mimetype)) {
@@ -37,7 +41,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
 });
 
 module.exports = upload;
