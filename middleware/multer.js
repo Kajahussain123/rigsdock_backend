@@ -1,5 +1,5 @@
 const multer = require("multer");
-const { S3Client, HeadBucketCommand, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, HeadBucketCommand, GetObjectCommand, PutObjectCommand, CopyObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { fromInstanceMetadata } = require("@aws-sdk/credential-providers");
 const multerS3 = require("multer-s3-v3");
@@ -71,26 +71,23 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Updated storage configuration with proper content headers
+// FIXED: Updated storage configuration with proper content type handling
 const storage = multerS3({
   s3: s3,
   bucket: process.env.S3_BUCKET_NAME,
+  acl: 'public-read', // ADDED: Make objects publicly readable
+  contentType: multerS3.AUTO_CONTENT_TYPE, // FIXED: Auto-detect content type
   metadata: function(req, file, cb) {
     cb(null, { 
       fieldName: file.fieldname,
-      'Content-Type': file.mimetype,
-      'Content-Disposition': 'inline'
+      originalName: file.originalname
     });
   },
   key: function(req, file, cb) {
     const ext = path.extname(file.originalname);
     const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '-');
     cb(null, `uploads/${Date.now()}-${name}${ext}`);
-  },
-  contentType: function(req, file, cb) {
-    cb(null, file.mimetype);
-  },
-  contentDisposition: 'inline' // Ensure files are displayed inline
+  }
 });
 
 // Create multer instance
@@ -102,14 +99,12 @@ const upload = multer({
   }
 });
 
-// Updated signed URL generator with proper display headers
+// Updated signed URL generator (for private access if needed)
 const getSignedImageUrl = async (s3Key, expiresIn = 86400) => {
   try {
     const command = new GetObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
-      Key: s3Key,
-      ResponseContentType: 'auto', // Let S3 determine content type
-      ResponseContentDisposition: 'inline' // Display in browser
+      Key: s3Key
     });
     
     const signedUrl = await getSignedUrl(s3, command, { expiresIn });
@@ -120,14 +115,18 @@ const getSignedImageUrl = async (s3Key, expiresIn = 86400) => {
   }
 };
 
+// Function to generate public URL (since we're using public-read ACL)
+const getPublicUrl = (s3Key) => {
+  return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+};
+
 // Function to generate signed URL for PUT operations
 const getSignedPutUrl = async (s3Key, contentType, expiresIn = 3600) => {
   try {
     const command = new PutObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
       Key: s3Key,
-      ContentType: contentType,
-      ContentDisposition: 'inline'
+      ContentType: contentType
     });
     
     const signedUrl = await getSignedUrl(s3, command, { expiresIn });
@@ -146,20 +145,22 @@ const getS3KeyFromFilename = (filename) => {
   return `uploads/${filename}`;
 };
 
-// Backward compatibility middleware
+// FIXED: Backward compatibility middleware
 const addBackwardCompatibility = async (req, res, next) => {
   if (req.file) {
     req.file.s3Key = req.file.key;
     req.file.filename = req.file.key ? req.file.key.split('/').pop() : req.file.originalname;
     req.file.destination = 'uploads/';
     
+    // Use public URL instead of signed URL for public access
+    req.file.publicUrl = getPublicUrl(req.file.key);
+    req.file.path = req.file.publicUrl;
+    
     try {
       req.file.signedUrl = await getSignedImageUrl(req.file.key);
-      req.file.path = req.file.signedUrl;
     } catch (error) {
       console.error('Failed to generate signed URL:', error);
       req.file.signedUrl = null;
-      req.file.path = req.file.location;
     }
   }
   
@@ -170,13 +171,15 @@ const addBackwardCompatibility = async (req, res, next) => {
         file.filename = file.key.split('/').pop();
         file.destination = 'uploads/';
         
+        // Use public URL instead of signed URL for public access
+        file.publicUrl = getPublicUrl(file.key);
+        file.path = file.publicUrl;
+        
         try {
           file.signedUrl = await getSignedImageUrl(file.key);
-          file.path = file.signedUrl;
         } catch (error) {
           console.error('Failed to generate signed URL for file:', error);
           file.signedUrl = null;
-          file.path = file.location;
         }
       }
     } else {
@@ -186,13 +189,15 @@ const addBackwardCompatibility = async (req, res, next) => {
           file.filename = file.key.split('/').pop();
           file.destination = 'uploads/';
           
+          // Use public URL instead of signed URL for public access
+          file.publicUrl = getPublicUrl(file.key);
+          file.path = file.publicUrl;
+          
           try {
             file.signedUrl = await getSignedImageUrl(file.key);
-            file.path = file.signedUrl;
           } catch (error) {
             console.error('Failed to generate signed URL for file:', error);
             file.signedUrl = null;
-            file.path = file.location;
           }
         }
       }
@@ -280,28 +285,49 @@ const getS3Status = () => {
 const getAccessibleUrl = async (filename) => {
   try {
     const s3Key = getS3KeyFromFilename(filename);
-    const signedUrl = await getSignedImageUrl(s3Key);
-    return signedUrl;
+    // Return public URL for immediate access
+    return getPublicUrl(s3Key);
   } catch (error) {
     console.error('Error generating accessible URL:', error);
     return null;
   }
 };
 
-// New function to fix existing objects' metadata
-const fixObjectMetadata = async (s3Key) => {
+// FIXED: Function to fix existing objects' metadata and ACL
+const fixObjectMetadata = async (s3Key, fileExtension = '.jpg') => {
   try {
+    // Determine content type based on file extension
+    let contentType = 'application/octet-stream';
+    const ext = fileExtension.toLowerCase();
+    
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    };
+    
+    if (mimeTypes[ext]) {
+      contentType = mimeTypes[ext];
+    }
+    
     const command = new CopyObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
       Key: s3Key,
       CopySource: `${process.env.S3_BUCKET_NAME}/${s3Key}`,
       MetadataDirective: 'REPLACE',
-      ContentType: 'image/jpeg', // Adjust based on your file type
-      ContentDisposition: 'inline'
+      ContentType: contentType,
+      ACL: 'public-read' // ADDED: Make the object publicly readable
     });
     
     await s3.send(command);
-    console.log(`Fixed metadata for ${s3Key}`);
+    console.log(`Fixed metadata and ACL for ${s3Key} with content type: ${contentType}`);
     return true;
   } catch (error) {
     console.error(`Error fixing metadata for ${s3Key}:`, error);
@@ -321,5 +347,6 @@ module.exports = {
   getSignedPutUrl: getSignedPutUrl,
   getS3KeyFromFilename: getS3KeyFromFilename,
   getAccessibleUrl: getAccessibleUrl,
+  getPublicUrl: getPublicUrl, // ADDED: New function for public URLs
   fixObjectMetadata: fixObjectMetadata
 };
