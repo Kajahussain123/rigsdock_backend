@@ -1,5 +1,6 @@
 const multer = require("multer");
-const { S3Client, HeadBucketCommand } = require("@aws-sdk/client-s3");
+const { S3Client, HeadBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { fromInstanceMetadata } = require("@aws-sdk/credential-providers");
 const multerS3 = require("multer-s3-v3");
 const path = require("path");
@@ -84,7 +85,11 @@ const storage = multerS3({
     const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '-');
     cb(null, `uploads/${Date.now()}-${name}${ext}`);
   },
-  contentType: multerS3.AUTO_CONTENT_TYPE
+  contentType: function(req, file, cb) {
+    // Explicitly set content type based on file mimetype
+    cb(null, file.mimetype);
+  },
+  acl: 'public-read' // Add this if you want public access
 });
 
 // Create multer instance
@@ -96,9 +101,35 @@ const upload = multer({
   }
 });
 
+// Function to generate signed URL
+const getSignedImageUrl = async (s3Key, expiresIn = 3600) => {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: s3Key
+    });
+    
+    const signedUrl = await getSignedUrl(s3, command, { expiresIn });
+    return signedUrl;
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    throw error;
+  }
+};
+
+// Function to extract S3 key from filename
+const getS3KeyFromFilename = (filename) => {
+  // If filename already includes the uploads/ prefix, return as is
+  if (filename.startsWith('uploads/')) {
+    return filename;
+  }
+  // Otherwise, add the uploads/ prefix
+  return `uploads/${filename}`;
+};
+
 // BACKWARD COMPATIBILITY MIDDLEWARE
 // This makes S3 uploads compatible with existing routes that expect req.file.path
-const addBackwardCompatibility = (req, res, next) => {
+const addBackwardCompatibility = async (req, res, next) => {
   if (req.file) {
     console.log('🔄 Before backward compatibility:');
     console.log('  - req.file.location:', req.file.location);
@@ -106,33 +137,60 @@ const addBackwardCompatibility = (req, res, next) => {
     console.log('  - req.file.path (before):', req.file.path);
     
     // Add backward compatibility properties
-    req.file.path = req.file.location; // Most important: map S3 URL to path
-    req.file.filename = req.file.key ? req.file.key.split('/').pop() : req.file.originalname; // Extract filename from S3 key
-    req.file.destination = 'uploads/'; // Mimic local upload destination
+    req.file.path = req.file.location; // Keep original S3 URL
+    req.file.filename = req.file.key ? req.file.key.split('/').pop() : req.file.originalname;
+    req.file.destination = 'uploads/';
+    req.file.s3Key = req.file.key; // Store S3 key for signed URL generation
+    
+    // Generate signed URL for immediate use
+    try {
+      req.file.signedUrl = await getSignedImageUrl(req.file.key);
+      console.log('✅ Generated signed URL:', req.file.signedUrl);
+    } catch (error) {
+      console.error('❌ Failed to generate signed URL:', error);
+      req.file.signedUrl = null;
+    }
     
     console.log('🔄 After backward compatibility:');
     console.log('  - req.file.path:', req.file.path);
     console.log('  - req.file.filename:', req.file.filename);
-    console.log('  - req.file.location:', req.file.location);
+    console.log('  - req.file.s3Key:', req.file.s3Key);
+    console.log('  - req.file.signedUrl:', req.file.signedUrl);
   }
   
   if (req.files) {
     // Handle multiple files (for array uploads)
     if (Array.isArray(req.files)) {
-      req.files.forEach(file => {
+      for (const file of req.files) {
         file.path = file.location;
         file.filename = file.key.split('/').pop();
         file.destination = 'uploads/';
-      });
+        file.s3Key = file.key;
+        
+        try {
+          file.signedUrl = await getSignedImageUrl(file.key);
+        } catch (error) {
+          console.error('❌ Failed to generate signed URL for file:', error);
+          file.signedUrl = null;
+        }
+      }
     } else {
       // Handle field-based multiple files
-      Object.keys(req.files).forEach(fieldName => {
-        req.files[fieldName].forEach(file => {
+      for (const fieldName of Object.keys(req.files)) {
+        for (const file of req.files[fieldName]) {
           file.path = file.location;
           file.filename = file.key.split('/').pop();
           file.destination = 'uploads/';
-        });
-      });
+          file.s3Key = file.key;
+          
+          try {
+            file.signedUrl = await getSignedImageUrl(file.key);
+          } catch (error) {
+            console.error('❌ Failed to generate signed URL for file:', error);
+            file.signedUrl = null;
+          }
+        }
+      }
     }
   }
   
@@ -150,7 +208,7 @@ const handleMulterError = (uploadFunction) => {
       });
     }
     
-    uploadFunction(req, res, (err) => {
+    uploadFunction(req, res, async (err) => {
       if (err) {
         console.error('📁 Upload error:', err);
         
@@ -202,7 +260,7 @@ const handleMulterError = (uploadFunction) => {
       }
       
       // Add backward compatibility AFTER successful upload
-      addBackwardCompatibility(req, res, next);
+      await addBackwardCompatibility(req, res, next);
     });
   };
 };
@@ -223,5 +281,7 @@ module.exports = {
   none: () => handleMulterError(upload.none()),
   any: () => handleMulterError(upload.any()),
   raw: upload,
-  getS3Status: getS3Status
+  getS3Status: getS3Status,
+  getSignedImageUrl: getSignedImageUrl,
+  getS3KeyFromFilename: getS3KeyFromFilename
 };
