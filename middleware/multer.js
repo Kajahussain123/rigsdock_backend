@@ -75,16 +75,18 @@ const fileFilter = (req, file, cb) => {
 const storage = multerS3({
   s3: s3,
   bucket: process.env.S3_BUCKET_NAME,
-  acl: 'public-read', // ADDED: Make objects publicly readable
-  contentType: multerS3.AUTO_CONTENT_TYPE, // FIXED: Auto-detect content type
+  acl: 'public-read',
+  contentType: multerS3.AUTO_CONTENT_TYPE,
   metadata: function(req, file, cb) {
     cb(null, { 
       fieldName: file.fieldname,
-      originalName: file.originalname
+      originalName: file.originalname,
+      // Explicitly set Content-Type if auto-detection fails
+      'Content-Type': file.mimetype
     });
   },
   key: function(req, file, cb) {
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase();
     const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '-');
     cb(null, `uploads/${Date.now()}-${name}${ext}`);
   }
@@ -347,6 +349,6 @@ module.exports = {
   getSignedPutUrl: getSignedPutUrl,
   getS3KeyFromFilename: getS3KeyFromFilename,
   getAccessibleUrl: getAccessibleUrl,
-  getPublicUrl: getPublicUrl, // ADDED: New function for public URLs
+  getPublicUrl: getPublicUrl, 
   fixObjectMetadata: fixObjectMetadata
 };
