@@ -100,12 +100,17 @@ const upload = multer({
 // This makes S3 uploads compatible with existing routes that expect req.file.path
 const addBackwardCompatibility = (req, res, next) => {
   if (req.file) {
+    console.log('🔄 Before backward compatibility:');
+    console.log('  - req.file.location:', req.file.location);
+    console.log('  - req.file.key:', req.file.key);
+    console.log('  - req.file.path (before):', req.file.path);
+    
     // Add backward compatibility properties
     req.file.path = req.file.location; // Most important: map S3 URL to path
-    req.file.filename = req.file.key.split('/').pop(); // Extract filename from S3 key
+    req.file.filename = req.file.key ? req.file.key.split('/').pop() : req.file.originalname; // Extract filename from S3 key
     req.file.destination = 'uploads/'; // Mimic local upload destination
     
-    console.log('🔄 Added backward compatibility:');
+    console.log('🔄 After backward compatibility:');
     console.log('  - req.file.path:', req.file.path);
     console.log('  - req.file.filename:', req.file.filename);
     console.log('  - req.file.location:', req.file.location);
