@@ -1,5 +1,5 @@
 const multer = require("multer");
-const { S3Client, HeadBucketCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, HeadBucketCommand, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { fromInstanceMetadata } = require("@aws-sdk/credential-providers");
 const multerS3 = require("multer-s3-v3");
@@ -73,7 +73,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Storage configuration
+// Storage configuration - REMOVED ACL to avoid AccessDenied errors
 const storage = multerS3({
   s3: s3,
   bucket: process.env.S3_BUCKET_NAME,
@@ -88,8 +88,8 @@ const storage = multerS3({
   contentType: function(req, file, cb) {
     // Explicitly set content type based on file mimetype
     cb(null, file.mimetype);
-  },
-  acl: 'public-read' // Add this if you want public access
+  }
+  // REMOVED: acl: 'public-read' - This was causing AccessDenied errors
 });
 
 // Create multer instance
@@ -101,8 +101,8 @@ const upload = multer({
   }
 });
 
-// Function to generate signed URL
-const getSignedImageUrl = async (s3Key, expiresIn = 3600) => {
+// Function to generate signed URL - INCREASED DEFAULT EXPIRY
+const getSignedImageUrl = async (s3Key, expiresIn = 86400) => { // 24 hours instead of 1 hour
   try {
     const command = new GetObjectCommand({
       Bucket: process.env.S3_BUCKET_NAME,
@@ -113,6 +113,23 @@ const getSignedImageUrl = async (s3Key, expiresIn = 3600) => {
     return signedUrl;
   } catch (error) {
     console.error('Error generating signed URL:', error);
+    throw error;
+  }
+};
+
+// Function to generate signed URL for PUT operations (for direct uploads)
+const getSignedPutUrl = async (s3Key, contentType, expiresIn = 3600) => {
+  try {
+    const command = new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: s3Key,
+      ContentType: contentType
+    });
+    
+    const signedUrl = await getSignedUrl(s3, command, { expiresIn });
+    return signedUrl;
+  } catch (error) {
+    console.error('Error generating signed PUT URL:', error);
     throw error;
   }
 };
@@ -137,18 +154,22 @@ const addBackwardCompatibility = async (req, res, next) => {
     console.log('  - req.file.path (before):', req.file.path);
     
     // Add backward compatibility properties
-    req.file.path = req.file.location; // Keep original S3 URL
+    req.file.s3Key = req.file.key; // Store S3 key for signed URL generation
     req.file.filename = req.file.key ? req.file.key.split('/').pop() : req.file.originalname;
     req.file.destination = 'uploads/';
-    req.file.s3Key = req.file.key; // Store S3 key for signed URL generation
     
     // Generate signed URL for immediate use
     try {
       req.file.signedUrl = await getSignedImageUrl(req.file.key);
       console.log('✅ Generated signed URL:', req.file.signedUrl);
+      
+      // Set path to signed URL instead of direct S3 URL
+      req.file.path = req.file.signedUrl;
+      
     } catch (error) {
       console.error('❌ Failed to generate signed URL:', error);
       req.file.signedUrl = null;
+      req.file.path = req.file.location; // Fallback to original location
     }
     
     console.log('🔄 After backward compatibility:');
@@ -162,32 +183,34 @@ const addBackwardCompatibility = async (req, res, next) => {
     // Handle multiple files (for array uploads)
     if (Array.isArray(req.files)) {
       for (const file of req.files) {
-        file.path = file.location;
+        file.s3Key = file.key;
         file.filename = file.key.split('/').pop();
         file.destination = 'uploads/';
-        file.s3Key = file.key;
         
         try {
           file.signedUrl = await getSignedImageUrl(file.key);
+          file.path = file.signedUrl;
         } catch (error) {
           console.error('❌ Failed to generate signed URL for file:', error);
           file.signedUrl = null;
+          file.path = file.location;
         }
       }
     } else {
       // Handle field-based multiple files
       for (const fieldName of Object.keys(req.files)) {
         for (const file of req.files[fieldName]) {
-          file.path = file.location;
+          file.s3Key = file.key;
           file.filename = file.key.split('/').pop();
           file.destination = 'uploads/';
-          file.s3Key = file.key;
           
           try {
             file.signedUrl = await getSignedImageUrl(file.key);
+            file.path = file.signedUrl;
           } catch (error) {
             console.error('❌ Failed to generate signed URL for file:', error);
             file.signedUrl = null;
+            file.path = file.location;
           }
         }
       }
@@ -274,6 +297,18 @@ const getS3Status = () => {
   };
 };
 
+// Helper function to get accessible URL from stored filename
+const getAccessibleUrl = async (filename) => {
+  try {
+    const s3Key = getS3KeyFromFilename(filename);
+    const signedUrl = await getSignedImageUrl(s3Key);
+    return signedUrl;
+  } catch (error) {
+    console.error('Error generating accessible URL:', error);
+    return null;
+  }
+};
+
 module.exports = {
   single: (fieldName) => handleMulterError(upload.single(fieldName)),
   array: (fieldName, maxCount) => handleMulterError(upload.array(fieldName, maxCount)),
@@ -283,5 +318,7 @@ module.exports = {
   raw: upload,
   getS3Status: getS3Status,
   getSignedImageUrl: getSignedImageUrl,
-  getS3KeyFromFilename: getS3KeyFromFilename
+  getSignedPutUrl: getSignedPutUrl,
+  getS3KeyFromFilename: getS3KeyFromFilename,
+  getAccessibleUrl: getAccessibleUrl
 };
