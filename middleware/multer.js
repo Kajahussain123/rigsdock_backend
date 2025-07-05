@@ -1,6 +1,6 @@
 const multer = require("multer");
 const { S3Client, HeadBucketCommand } = require("@aws-sdk/client-s3");
-const { fromInstanceMetadata } = require("@aws-sdk/credential-providers"); // Added this import
+const { fromInstanceMetadata } = require("@aws-sdk/credential-providers");
 const multerS3 = require("multer-s3-v3");
 const path = require("path");
 
@@ -23,12 +23,15 @@ if (!process.env.S3_BUCKET_NAME) {
 // Configure AWS SDK v3 client with explicit credential provider
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
-  credentials: fromInstanceMetadata(), // Now properly imported
+  credentials: fromInstanceMetadata(),
   requestHandlerOptions: {
     timeout: 300000
   },
   maxAttempts: 3
 });
+
+// Global variable to track S3 connection status
+let s3ConnectionStatus = false;
 
 // Test S3 connection
 const testS3Connection = async () => {
@@ -36,12 +39,20 @@ const testS3Connection = async () => {
     console.log('🔍 Testing S3 connection with IAM role...');
     await s3.send(new HeadBucketCommand({ Bucket: process.env.S3_BUCKET_NAME }));
     console.log('✅ S3 connection successful');
+    s3ConnectionStatus = true;
+    return true;
   } catch (error) {
     console.error('❌ S3 connection failed:', error.message);
     console.error('Full error details:', error);
-    process.exit(1);
+    
+    // Don't exit the process, just log the error
+    console.error('⚠️  Server will continue but file uploads will fail');
+    s3ConnectionStatus = false;
+    return false;
   }
 };
+
+// Test connection but don't block server startup
 testS3Connection();
 
 // File filter
@@ -53,7 +64,7 @@ const fileFilter = (req, file, cb) => {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel"
   ];
-
+  
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -85,18 +96,78 @@ const upload = multer({
   }
 });
 
-// Error handling middleware
+// Enhanced error handling middleware
 const handleMulterError = (uploadFunction) => {
   return (req, res, next) => {
+    // Check S3 connection status first
+    if (!s3ConnectionStatus) {
+      return res.status(503).json({ 
+        error: 'File upload service temporarily unavailable. S3 connection failed.',
+        details: 'Please check server logs for S3 configuration issues.'
+      });
+    }
+    
     uploadFunction(req, res, (err) => {
       if (err) {
+        console.error('📁 Upload error:', err);
+        
         if (err instanceof multer.MulterError) {
-          return res.status(400).json({ error: err.message });
+          switch (err.code) {
+            case 'LIMIT_FILE_SIZE':
+              return res.status(400).json({ 
+                error: 'File too large. Maximum size is 50MB.',
+                code: 'FILE_TOO_LARGE'
+              });
+            case 'LIMIT_FILE_COUNT':
+              return res.status(400).json({ 
+                error: 'Too many files uploaded.',
+                code: 'TOO_MANY_FILES'
+              });
+            case 'LIMIT_UNEXPECTED_FILE':
+              return res.status(400).json({ 
+                error: 'Unexpected field name in file upload.',
+                code: 'UNEXPECTED_FIELD'
+              });
+            default:
+              return res.status(400).json({ 
+                error: err.message,
+                code: 'MULTER_ERROR'
+              });
+          }
         }
-        return res.status(500).json({ error: err.message });
+        
+        // AWS S3 specific errors
+        if (err.name === 'NoSuchBucket') {
+          return res.status(500).json({ 
+            error: 'S3 bucket not found.',
+            code: 'BUCKET_NOT_FOUND'
+          });
+        }
+        
+        if (err.name === 'AccessDenied') {
+          return res.status(500).json({ 
+            error: 'Access denied to S3 bucket.',
+            code: 'ACCESS_DENIED'
+          });
+        }
+        
+        return res.status(500).json({ 
+          error: 'File upload failed.',
+          details: err.message,
+          code: 'UPLOAD_ERROR'
+        });
       }
       next();
     });
+  };
+};
+
+// Health check function
+const getS3Status = () => {
+  return {
+    connected: s3ConnectionStatus,
+    bucket: process.env.S3_BUCKET_NAME,
+    region: process.env.AWS_REGION
   };
 };
 
@@ -106,5 +177,6 @@ module.exports = {
   fields: (fields) => handleMulterError(upload.fields(fields)),
   none: () => handleMulterError(upload.none()),
   any: () => handleMulterError(upload.any()),
-  raw: upload
+  raw: upload,
+  getS3Status: getS3Status
 };
