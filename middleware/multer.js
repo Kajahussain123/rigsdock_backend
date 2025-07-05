@@ -96,6 +96,44 @@ const upload = multer({
   }
 });
 
+// BACKWARD COMPATIBILITY MIDDLEWARE
+// This makes S3 uploads compatible with existing routes that expect req.file.path
+const addBackwardCompatibility = (req, res, next) => {
+  if (req.file) {
+    // Add backward compatibility properties
+    req.file.path = req.file.location; // Most important: map S3 URL to path
+    req.file.filename = req.file.key.split('/').pop(); // Extract filename from S3 key
+    req.file.destination = 'uploads/'; // Mimic local upload destination
+    
+    console.log('🔄 Added backward compatibility:');
+    console.log('  - req.file.path:', req.file.path);
+    console.log('  - req.file.filename:', req.file.filename);
+    console.log('  - req.file.location:', req.file.location);
+  }
+  
+  if (req.files) {
+    // Handle multiple files (for array uploads)
+    if (Array.isArray(req.files)) {
+      req.files.forEach(file => {
+        file.path = file.location;
+        file.filename = file.key.split('/').pop();
+        file.destination = 'uploads/';
+      });
+    } else {
+      // Handle field-based multiple files
+      Object.keys(req.files).forEach(fieldName => {
+        req.files[fieldName].forEach(file => {
+          file.path = file.location;
+          file.filename = file.key.split('/').pop();
+          file.destination = 'uploads/';
+        });
+      });
+    }
+  }
+  
+  next();
+};
+
 // Enhanced error handling middleware
 const handleMulterError = (uploadFunction) => {
   return (req, res, next) => {
@@ -157,7 +195,9 @@ const handleMulterError = (uploadFunction) => {
           code: 'UPLOAD_ERROR'
         });
       }
-      next();
+      
+      // Add backward compatibility AFTER successful upload
+      addBackwardCompatibility(req, res, next);
     });
   };
 };
