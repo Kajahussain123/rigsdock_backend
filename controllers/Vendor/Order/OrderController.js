@@ -19,33 +19,30 @@ exports.getAllOrders = async (req, res) => {
   try {
     // Find all products owned by the logged-in vendor
     const vendorProducts = await Product.find({ owner: req.user.id }).select("_id");
-    console.log(vendorProducts)
-
-    // Extract product IDs
     const productIds = vendorProducts.map(product => product._id);
-    console.log(productIds)
 
-    // Find all orders that contain these products
+    // Find all orders that contain these products with proper error handling
     const orders = await Order.find({ "items.product": { $in: productIds } })
       .populate("user", "name email")
       .populate({
         path: 'items.product',
         populate: {
           path: 'owner',
-          model: 'Vendor' // Make sure this matches your ownerType model name
+          model: 'Vendor'
         }
       })
       .populate("shippingAddress");
-    // console.log(orders);
 
     const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
     const platformFee = platformFeeData?.amount || 0;
 
     const processedOrders = orders
       .map(order => {
-        // Filter items to include only vendor's products
-        const filteredItems = order.items.filter(item =>
-          productIds.some(id => id.toString() === item.product._id.toString())
+        // Filter items to include only vendor's products with null checks
+        const filteredItems = order.items.filter(item => 
+          item.product && 
+          item.product._id && 
+          productIds.some(id => id.equals(item.product._id))
         );
 
         // Calculate order totals
@@ -73,7 +70,10 @@ exports.getAllOrders = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).send({ error: "An error occurred while fetching orders." });
+    res.status(500).json({ 
+      message: "An error occurred while fetching orders",
+      error: error.message 
+    });
   }
 }
 

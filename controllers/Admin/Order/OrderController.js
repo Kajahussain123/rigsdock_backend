@@ -2,39 +2,7 @@ const Order = require('../../../models/User/OrderModel');
 const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const { trackShipment } = require('../../../controllers/Shiprocket/ShipRocketController');
 
-// get all orders
-// exports.getAllOrders = async (req,res) => {
-//     try {
-//         const orders = await Order.find().populate('user').populate({
-//             path: 'items.product',
-//             populate: [
-//                 { path: 'owner', model: 'Vendor' },
-//                 { path: 'category', model: 'Category' } // populate category
-//             ]
-//           });
-//         if(orders.length === 0) {
-//             return res.status(404).json({ message: "no orders found" });
-//         }
 
-//         const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
-//         const platformFee = platformFeeData?.amount || 0; 
-
-//         // Calculate final price for each order
-//         const ordersWithPlatformFee = orders.map(order => {
-//             const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
-//             return {
-//                 ...order.toObject(), // Convert Mongoose document to plain object
-//                 platformFee,
-//                 finalTotalPrice: finalTotal
-//             };
-//         });
-
-
-//         res.status(200).json({ message: "orders fetched successfully",total: orders.length ,orders: ordersWithPlatformFee  });
-//     } catch (error) {
-//         res.status(500).json({ message: 'Error fetching orders', error:error.message })
-//     }
-// }
 
 
 exports.getAllOrders = async (req, res) => {
@@ -59,7 +27,8 @@ exports.getAllOrders = async (req, res) => {
             // Calculate commission for each item
             const itemsWithCommission = order.items.map(item => {
                 const product = item.product;
-                const commissionPercentage = product.category?.commissionPercentage || 0;
+                // Default commission percentage to 0 if category is missing
+                const commissionPercentage = product?.category?.commissionPercentage || 0;
                 const itemPrice = item.price; // Final price paid by customer
                 const commissionAmount = (itemPrice * commissionPercentage) / 100;
                 const vendorAmount = itemPrice - commissionAmount;
