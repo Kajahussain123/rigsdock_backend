@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const bodyParser = require('body-parser');
 require("./config/db");
 const path = require("path");
 const app = express();
@@ -33,6 +34,7 @@ const io = socketIo(server, {
     methods: ["GET", "POST"],
   },
 });
+app.use(bodyParser.json());
 
 const cron = require("node-cron")
 const Offer = require("./models/admin/OfferModel");
@@ -121,6 +123,7 @@ const vendorUserRoutes=require('./routes/User/vendorRoutes')
 const platFormFee = require('./routes/admin/PlatformFee/PlatformFeeRoutes')
 const userShiprocket = require('./routes/User/ShiprocketRoutes');
 const cancelOrderRoutes = require("./routes/User/cancelorderRoute")
+const chatbotRoutes = require('./routes/User/ChatBotRoutes');
 // Token Refresh
 app.use("/token", tokenRefresh);
 
@@ -200,7 +203,7 @@ app.use("/api/user/dealoftheday",dealofthedayUserRoutes)
 app.use("/api/user/vendor",vendorUserRoutes)
 app.use("/api/user/shiprocket",userShiprocket);
 app.use("/api/user/orders",cancelOrderRoutes);
-
+app.use('/api/user/chatbot', chatbotRoutes);
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
