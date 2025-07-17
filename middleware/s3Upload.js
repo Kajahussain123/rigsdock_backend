@@ -19,6 +19,7 @@ const uploadToS3 = async (fileBuffer, fileName, mimeType) => {
       Key: uniqueKey,
       Body: fileBuffer,
       ContentType: mimeType,
+      ContentDisposition: 'inline', // ✅ Add this!
       ACL: 'public-read'
     }
   });
@@ -26,5 +27,6 @@ const uploadToS3 = async (fileBuffer, fileName, mimeType) => {
   const result = await upload.done();
   return result.Location;
 };
+
 
 module.exports = { uploadToS3 };
