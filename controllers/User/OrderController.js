@@ -204,6 +204,208 @@ const phonePeClient = StandardCheckoutClient.getInstance(
 //       }
 //   }
 // };
+// exports.placeOrder = async (req, res) => {
+//   try {
+//       const { userId, shippingAddressId, paymentMethod } = req.body;
+
+//       // Fetch user's cart
+//       const cart = await Cart.findOne({ user: userId }).populate("items.product");
+
+//       if (!cart || cart.items.length === 0) {
+//           return res.status(400).json({ message: "Cart is empty" });
+//       }
+
+//       // Validate shipping address
+//       const shippingAddress = await Address.findById(shippingAddressId);
+//       if (!shippingAddress) {
+//           return res.status(400).json({ message: "Invalid shipping address" });
+//       }
+
+//       // Validate payment method
+//       const validPaymentMethods = ["COD", "PhonePe", "Credit Card", "Debit Card", "UPI"];
+//       if (!validPaymentMethods.includes(paymentMethod)) {
+//           return res.status(400).json({ message: "Invalid payment method" });
+//       }
+
+//       // Fetch platform fee
+//       const platformFee = await PlatformFee.findOne().sort({ createdAt: -1 });
+//       if (!platformFee) {
+//           console.error("Platform fee not configured");
+//           return res.status(500).json({ message: "Platform fee configuration not found" });
+//       }
+
+//       // Group items by vendor
+//       const vendorOrders = {};
+//       let subtotal = 0;
+
+//       cart.items.forEach(item => {
+//           const vendorId = item.product.owner ? item.product.owner.toString() : null;
+//           if (!vendorId) {
+//               console.error("Error: Product missing owner field", item.product);
+//               return;
+//           }
+
+//           if (!vendorOrders[vendorId]) {
+//               vendorOrders[vendorId] = { vendor: vendorId, items: [], totalPrice: 0 };
+//           }
+
+//           vendorOrders[vendorId].items.push({
+//               product: item.product._id,
+//               quantity: item.quantity,
+//               price: item.price,
+//           });
+
+//           vendorOrders[vendorId].totalPrice += item.price * item.quantity;
+//           subtotal += item.price * item.quantity;
+//       });
+
+//       // Calculate platform fee
+//       let platformFeeAmount = 0;
+//       if (platformFee.feeType === "fixed") {
+//           platformFeeAmount = platformFee.amount;
+//       } else if (platformFee.feeType === "percentage") {
+//           platformFeeAmount = (subtotal * platformFee.amount) / 100;
+//       }
+
+//       // Calculate total amount including platform fee
+//       const totalAmount = subtotal + platformFeeAmount;
+
+//       // Create Main Order
+//       const mainOrder = new MainOrder({
+//           user: userId,
+//           subtotal,
+//           platformFee: platformFeeAmount,
+//           totalAmount,
+//           paymentMethod,
+//           paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
+//           orderStatus: "Processing",
+//           shippingAddress: shippingAddressId,
+//           subOrders: [],
+//       });
+
+//       await mainOrder.save();
+
+//       // Create vendor orders
+//       const createdOrders = [];
+//       for (const vendorId in vendorOrders) {
+//           const orderData = vendorOrders[vendorId];
+
+//           const newOrder = new Order({
+//               mainOrderId: mainOrder._id,
+//               user: userId,
+//               vendor: vendorId,
+//               items: orderData.items,
+//               totalPrice: orderData.totalPrice,
+//               paymentMethod,
+//               paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
+//               orderStatus: "Processing",
+//               shippingAddress: shippingAddressId,
+//           });
+
+//           await newOrder.save();
+//           createdOrders.push(newOrder._id);
+//       }
+
+//       // Update Main Order with subOrders
+//       mainOrder.subOrders = createdOrders;
+//       await mainOrder.save();
+
+//       // Create Shiprocket shipments for each sub-order
+//       const shiprocketResponses = [];
+//       for (const subOrderId of createdOrders) {
+//           const subOrder = await Order.findById(subOrderId).populate('items.product');
+
+//           // Create Shiprocket order for each subOrder
+//           const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
+
+//           // Save Shiprocket IDs to the subOrder
+//           subOrder.shiprocketOrderId = response.order_id;
+//           subOrder.shiprocketShipmentId = response.shipment_id;
+//           await subOrder.save();
+
+//           shiprocketResponses.push(response);
+//       }
+
+//       // Prepare response data based on payment method
+//       let responseData;
+
+//       if (paymentMethod === "COD") {
+//           await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
+//           responseData = {
+//               message: "Order placed successfully with Cash on Delivery",
+//               mainOrderId: mainOrder._id,
+//               orders: createdOrders,
+//               subtotal,
+//               platformFee: platformFeeAmount,
+//               totalAmount,
+//               shiprocketResponses,
+//           };
+//       } 
+//       else if (paymentMethod === "PhonePe") {
+//           const merchantTransactionId = randomUUID();
+//           const amountInPaisa = totalAmount * 100;
+//           const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?order_id=${mainOrder._id}`;
+
+//           const metaInfo = {
+//               udf1: "order",
+//               udf2: userId
+//           };
+
+//           const payRequest = StandardCheckoutPayRequest.builder()
+//               .merchantOrderId(merchantTransactionId)
+//               .amount(amountInPaisa)
+//               .redirectUrl(redirectUrl)
+//               .metaInfo(metaInfo)
+//               .build();
+
+//           const phonepeResponse = await phonePeClient.pay(payRequest);
+          
+//           mainOrder.phonepeTransactionId = merchantTransactionId;
+//           await mainOrder.save();
+
+//           responseData = {
+//               message: "Proceed to PhonePe Payment",
+//               paymentUrl: phonepeResponse.redirectUrl,
+//               mainOrderId: mainOrder._id,
+//               orders: createdOrders,
+//               subtotal,
+//               platformFee: platformFeeAmount,
+//               totalAmount,
+//               phonepeTransactionId: merchantTransactionId,
+//               shiprocketResponses,
+//           };
+//       } 
+//       else {
+//           responseData = {
+//               message: "Payment method not implemented yet",
+//               mainOrderId: mainOrder._id,
+//               orders: createdOrders,
+//               subtotal,
+//               platformFee: platformFeeAmount,
+//               totalAmount,
+//               shiprocketResponses,
+//           };
+//       }
+
+//       // Send a single response at the end
+//       res.status(201).json(responseData);
+
+//   } catch (error) {
+//     console.error("Error placing order:", {
+//       message: error.message,
+//       response: error.response?.data,
+//       status: error.response?.status,
+//     });
+//       if (!res.headersSent) {
+//           res.status(500).json({ 
+//               message: "Error placing order", 
+//               error: error.message,
+//               stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+//           });
+//       }
+//   }
+// };
+
 exports.placeOrder = async (req, res) => {
   try {
       const { userId, shippingAddressId, paymentMethod } = req.body;
@@ -234,7 +436,7 @@ exports.placeOrder = async (req, res) => {
           return res.status(500).json({ message: "Platform fee configuration not found" });
       }
 
-      // Group items by vendor
+      // Group items by vendor and calculate totals
       const vendorOrders = {};
       let subtotal = 0;
 
@@ -270,81 +472,50 @@ exports.placeOrder = async (req, res) => {
       // Calculate total amount including platform fee
       const totalAmount = subtotal + platformFeeAmount;
 
-      // Create Main Order
-      const mainOrder = new MainOrder({
-          user: userId,
-          subtotal,
-          platformFee: platformFeeAmount,
-          totalAmount,
-          paymentMethod,
-          paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
-          orderStatus: "Processing",
-          shippingAddress: shippingAddressId,
-          subOrders: [],
-      });
+      // Handle different payment methods
+      if (paymentMethod === "COD") {
+          // For COD, create order immediately
+          const orderResult = await createCompleteOrder(
+              userId, subtotal, platformFeeAmount, totalAmount, 
+              paymentMethod, shippingAddressId, vendorOrders, shippingAddress
+          );
 
-      await mainOrder.save();
+          // Clear cart for COD
+          await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
 
-      // Create vendor orders
-      const createdOrders = [];
-      for (const vendorId in vendorOrders) {
-          const orderData = vendorOrders[vendorId];
-
-          const newOrder = new Order({
-              mainOrderId: mainOrder._id,
-              user: userId,
-              vendor: vendorId,
-              items: orderData.items,
-              totalPrice: orderData.totalPrice,
-              paymentMethod,
-              paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
-              orderStatus: "Processing",
-              shippingAddress: shippingAddressId,
+          return res.status(201).json({
+              message: "Order placed successfully with Cash on Delivery",
+              ...orderResult
           });
 
-          await newOrder.save();
-          createdOrders.push(newOrder._id);
-      }
-
-      // Update Main Order with subOrders
-      mainOrder.subOrders = createdOrders;
-      await mainOrder.save();
-
-      // Create Shiprocket shipments for each sub-order
-      const shiprocketResponses = [];
-      for (const subOrderId of createdOrders) {
-          const subOrder = await Order.findById(subOrderId).populate('items.product');
-
-          // Create Shiprocket order for each subOrder
-          const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
-
-          // Save Shiprocket IDs to the subOrder
-          subOrder.shiprocketOrderId = response.order_id;
-          subOrder.shiprocketShipmentId = response.shipment_id;
-          await subOrder.save();
-
-          shiprocketResponses.push(response);
-      }
-
-      // Prepare response data based on payment method
-      let responseData;
-
-      if (paymentMethod === "COD") {
-          await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
-          responseData = {
-              message: "Order placed successfully with Cash on Delivery",
-              mainOrderId: mainOrder._id,
-              orders: createdOrders,
+      } else if (paymentMethod === "PhonePe") {
+          // For PhonePe, create pending order first
+          const pendingOrder = new MainOrder({
+              user: userId,
               subtotal,
               platformFee: platformFeeAmount,
               totalAmount,
-              shiprocketResponses,
-          };
-      } 
-      else if (paymentMethod === "PhonePe") {
+              paymentMethod,
+              paymentStatus: "Pending",
+              orderStatus: "Pending Payment",
+              shippingAddress: shippingAddressId,
+              subOrders: [],
+              // Store cart data for later order creation
+              pendingOrderData: {
+                  vendorOrders,
+                  cartItems: cart.items.map(item => ({
+                      product: item.product._id,
+                      quantity: item.quantity,
+                      price: item.price
+                  }))
+              }
+          });
+
+          await pendingOrder.save();
+
           const merchantTransactionId = randomUUID();
           const amountInPaisa = totalAmount * 100;
-          const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?order_id=${mainOrder._id}`;
+          const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?order_id=${pendingOrder._id}`;
 
           const metaInfo = {
               udf1: "order",
@@ -360,35 +531,24 @@ exports.placeOrder = async (req, res) => {
 
           const phonepeResponse = await phonePeClient.pay(payRequest);
           
-          mainOrder.phonepeTransactionId = merchantTransactionId;
-          await mainOrder.save();
+          pendingOrder.phonepeTransactionId = merchantTransactionId;
+          await pendingOrder.save();
 
-          responseData = {
+          return res.status(201).json({
               message: "Proceed to PhonePe Payment",
               paymentUrl: phonepeResponse.redirectUrl,
-              mainOrderId: mainOrder._id,
-              orders: createdOrders,
+              mainOrderId: pendingOrder._id,
               subtotal,
               platformFee: platformFeeAmount,
               totalAmount,
               phonepeTransactionId: merchantTransactionId,
-              shiprocketResponses,
-          };
-      } 
-      else {
-          responseData = {
-              message: "Payment method not implemented yet",
-              mainOrderId: mainOrder._id,
-              orders: createdOrders,
-              subtotal,
-              platformFee: platformFeeAmount,
-              totalAmount,
-              shiprocketResponses,
-          };
-      }
+          });
 
-      // Send a single response at the end
-      res.status(201).json(responseData);
+      } else {
+          return res.status(400).json({
+              message: "Payment method not implemented yet"
+          });
+      }
 
   } catch (error) {
     console.error("Error placing order:", {
