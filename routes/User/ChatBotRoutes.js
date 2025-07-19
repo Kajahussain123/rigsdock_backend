@@ -364,7 +364,8 @@ router.get('/chat-logs', async (req, res) => {
         
         const logs = await ChatLog.find(query)
             .sort({ timestamp: -1 })
-            .limit(parseInt(limit));
+            .limit(parseInt(limit))
+            .populate('userId');
             
         res.json(logs);
     } catch (error) {
