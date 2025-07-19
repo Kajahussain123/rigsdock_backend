@@ -14,7 +14,7 @@ const ChatLogSchema = new mongoose.Schema({
         required: true
     },
     attachments: [{
-        type: String, // URLs to stored attachments
+        type: String, 
         required: false
     }],
     timestamp: {
