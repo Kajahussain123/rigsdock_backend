@@ -25,7 +25,8 @@ const chatbotReply = async (userId, message, attachments = []) => {
 
     // Log the incoming message
     try {
-        if (userSessions[userId]?.expectingOrderId) {
+        // Handle Order ID lookup (existing logic)
+        if (userSessions[userId]?.expectingOrderId && !userSessions[userId]?.paymentIssue && !userSessions[userId]?.expectingReturnInfo) {
             const orderId = message.trim();
 
             try {
@@ -147,7 +148,58 @@ Sorry, there was an error retrieving your order. Please try again or contact sup
             }
         }
 
-        // Handle payment issues with screenshots
+        // Handle return information collection (NEW LOGIC)
+        if (userSessions[userId]?.expectingReturnInfo) {
+            if (!userSessions[userId].returnStep) {
+                // First step - expecting Order ID
+                userSessions[userId].returnStep = 'order_id';
+                userSessions[userId].returnOrderId = message.trim();
+                
+                const reply = `📦 Return Request - Order ID Received
+
+Order ID: ${message.trim()}
+
+Now please provide the reason for return:
+• Defective product
+• Wrong item received
+• Size/fit issue
+• Changed mind
+• Other (please specify)`;
+                
+                await logChat(userId, message, reply, attachments);
+                return reply;
+                
+            } else if (userSessions[userId].returnStep === 'order_id') {
+                // Second step - reason provided, complete the return request
+                const returnReason = message.trim();
+                const orderId = userSessions[userId].returnOrderId;
+                
+                const returnDetails = `✅ Return Request Submitted
+
+📋 Order ID: ${orderId}
+🔄 Reason: ${returnReason}
+📅 Request Date: ${new Date().toLocaleDateString()}
+
+Your return request has been submitted successfully!
+
+What happens next:
+1. Our team will review your request within 24 hours
+2. You'll receive return instructions via email/SMS
+3. Return pickup will be scheduled (if applicable)
+4. Refund will be processed after inspection
+
+For urgent queries: +91-9778466748
+📧 support@rigsdock.com`;
+
+                // Clear the session
+                delete userSessions[userId];
+                
+                await logChat(userId, message, returnDetails, attachments);
+                return returnDetails;
+            }
+        }
+
+        // Handle payment issues with screenshots (existing logic)
         if (text.includes('payment issue') || text.includes('payment problem') || 
             (userSessions[userId]?.paymentIssue && (attachments.length > 0 || message.toLowerCase() !== 'skip'))) {
             
@@ -198,16 +250,14 @@ Please provide your Order ID or PhonePe Order ID to check your order status.`;
             return reply;
         }
 
-        // Handle returns
+        // Handle returns (UPDATED LOGIC)
         if (text.includes('return') || text.includes('refund')) {
             userSessions[userId] = { expectingReturnInfo: true };
             const reply = `🔄 Return Assistance
 
-You can place a return request within 7 days of delivery. Please share:
-1. Your Order ID
-2. Reason for return
+You can place a return request within 7 days of delivery.
 
-Our team will assist you shortly.`;
+Please provide your Order ID first:`;
             await logChat(userId, message, reply, attachments);
             return reply;
         }
