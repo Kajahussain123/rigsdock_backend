@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const ChatLogSchema = new mongoose.Schema({
     userId: {
-        type: String,
-        required: true
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
     },
     userMessage: {
         type: String,
@@ -14,7 +14,7 @@ const ChatLogSchema = new mongoose.Schema({
         required: true
     },
     attachments: [{
-        type: String, 
+        type: String,
         required: false
     }],
     timestamp: {
