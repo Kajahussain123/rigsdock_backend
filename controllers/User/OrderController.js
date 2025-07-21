@@ -941,7 +941,7 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
       autoFirstPage: true,
     });
 
-    const invoiceDir = path.join(__dirname, "uploads"); // directly into /uploads
+    const invoiceDir = path.join(process.cwd(), "uploads"); // directly into /uploads
 if (!fs.existsSync(invoiceDir)) {
   fs.mkdirSync(invoiceDir, { recursive: true });
 }

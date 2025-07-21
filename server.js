@@ -208,7 +208,9 @@ app.use("/api/user/orders",cancelOrderRoutes);
 app.use('/api/user/chatbot', chatbotRoutes);
 
 // Serve uploaded files
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static("uploads"));
+
 
 // This function will check offers every day at midnight
 cron.schedule("0 0 * * *", async () => {
