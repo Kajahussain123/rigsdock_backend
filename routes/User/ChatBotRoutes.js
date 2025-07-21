@@ -23,6 +23,15 @@ const logChat = async (userId, message, reply, attachments = []) => {
 const chatbotReply = async (userId, message, attachments = []) => {
     const text = message.toLowerCase();
 
+    // Thank you message to append to final responses
+    const thankYouMessage = `
+
+🙏 Thank you for contacting us! We think your issue has been resolved. 
+
+Still facing issues? Please contact our support:
+📞 +91-9778466748
+📧 support@rigsdock.com`;
+
     // Log the incoming message
     try {
         // Handle Order ID lookup (existing logic)
@@ -123,6 +132,9 @@ ${addressParts.join(', ')}`;
                             break;
                     }
 
+                    // Add thank you message to final order details
+                    orderDetails += thankYouMessage;
+
                     await logChat(userId, message, orderDetails, attachments);
                     return orderDetails;
                 } else {
@@ -134,7 +146,7 @@ Please check:
 • Order ID format
 • PhonePe Order ID if applicable
 
-For assistance, contact: +91-9778466748`;
+For assistance, contact: +91-9778466748` + thankYouMessage;
                     await logChat(userId, message, notFoundReply, attachments);
                     return notFoundReply;
                 }
@@ -142,7 +154,7 @@ For assistance, contact: +91-9778466748`;
                 console.error('Error fetching order:', error);
                 const errorReply = `❌ Error
 
-Sorry, there was an error retrieving your order. Please try again or contact support at +91-9778466748.`;
+Sorry, there was an error retrieving your order. Please try again or contact support at +91-9778466748.` + thankYouMessage;
                 await logChat(userId, message, errorReply, attachments);
                 return errorReply;
             }
@@ -189,7 +201,7 @@ What happens next:
 4. Refund will be processed after inspection
 
 For urgent queries: +91-9778466748
-📧 support@rigsdock.com`;
+📧 support@rigsdock.com` + thankYouMessage;
 
                 // Clear the session
                 delete userSessions[userId];
@@ -230,7 +242,7 @@ Please provide:
                 
                 paymentDetails += `
 
-Our team will review your payment issue and respond within 24 hours. For immediate assistance, call +91-9778466748.`;
+Our team will review your payment issue and respond within 24 hours. For immediate assistance, call +91-9778466748.` + thankYouMessage;
                 
                 delete userSessions[userId].paymentIssue;
                 delete userSessions[userId].expectingOrderId;
@@ -296,7 +308,7 @@ How can I assist you today?`;
 
 Connecting you to a support agent... Please wait, or call us directly at +91-9778466748.
 
-You can also WhatsApp us at [Chat Now](#).`;
+You can also WhatsApp us at [Chat Now](#).` + thankYouMessage;
             await logChat(userId, message, reply, attachments);
             return reply;
         }
@@ -311,7 +323,7 @@ I can help you with:
 
 For direct support:
 📞 +91-9778466748
-📧 support@rigsdock.com`;
+📧 support@rigsdock.com` + thankYouMessage;
         await logChat(userId, message, defaultReply, attachments);
         return defaultReply;
 
@@ -319,7 +331,7 @@ For direct support:
         console.error('Error in chatbot processing:', error);
         const errorReply = `❌ Error
 
-Sorry, there was an error processing your request. Please try again or contact support at +91-9778466748.`;
+Sorry, there was an error processing your request. Please try again or contact support at +91-9778466748.` + thankYouMessage;
         await logChat(userId, message, errorReply, attachments);
         return errorReply;
     }
