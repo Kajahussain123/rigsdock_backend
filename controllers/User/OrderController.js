@@ -271,68 +271,21 @@ exports.placeOrder = async (req, res) => {
       // Calculate total amount including platform fee
       const totalAmount = subtotal + platformFeeAmount;
 
-      // Create Main Order
-      const mainOrder = new MainOrder({
-          user: userId,
-          subtotal,
-          platformFee: platformFeeAmount,
-          totalAmount,
-          paymentMethod,
-          paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
-          orderStatus: "Processing",
-          shippingAddress: shippingAddressId,
-          subOrders: [],
-      });
-
-      await mainOrder.save();
-
-      // Create vendor orders
-      const createdOrders = [];
-      for (const vendorId in vendorOrders) {
-          const orderData = vendorOrders[vendorId];
-
-          const newOrder = new Order({
-              mainOrderId: mainOrder._id,
-              user: userId,
-              vendor: vendorId,
-              items: orderData.items,
-              totalPrice: orderData.totalPrice,
-              paymentMethod,
-              paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
-              orderStatus: "Processing",
-              shippingAddress: shippingAddressId,
-          });
-
-          await newOrder.save();
-          createdOrders.push(newOrder._id);
-      }
-
-      // Update Main Order with subOrders
-      mainOrder.subOrders = createdOrders;
-      await mainOrder.save();
-
-      // Create Shiprocket shipments for each sub-order
-      const shiprocketResponses = [];
-      for (const subOrderId of createdOrders) {
-          const subOrder = await Order.findById(subOrderId).populate('items.product');
-
-          // Create Shiprocket order for each subOrder
-          const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
-
-          // Save Shiprocket IDs to the subOrder
-          subOrder.shiprocketOrderId = response.order_id;
-          subOrder.shiprocketShipmentId = response.shipment_id;
-          await subOrder.save();
-
-          shiprocketResponses.push(response);
-      }
-
-      // Prepare response data based on payment method
-      let responseData;
-
+      // Handle different payment methods
       if (paymentMethod === "COD") {
+          // For COD, create order immediately since payment is guaranteed
+          const { mainOrder, createdOrders } = await createOrdersInDatabase(
+              userId, subtotal, platformFeeAmount, totalAmount, paymentMethod, 
+              shippingAddressId, vendorOrders
+          );
+
+          // Create Shiprocket shipments
+          const shiprocketResponses = await createShiprocketShipments(createdOrders, mainOrder, shippingAddress, userId);
+
+          // Clear cart
           await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
-          responseData = {
+
+          return res.status(201).json({
               message: "Order placed successfully with Cash on Delivery",
               mainOrderId: mainOrder._id,
               orders: createdOrders,
@@ -340,66 +293,69 @@ exports.placeOrder = async (req, res) => {
               platformFee: platformFeeAmount,
               totalAmount,
               shiprocketResponses,
-          };
+          });
       } 
       else if (paymentMethod === "PhonePe") {
-    const merchantTransactionId = randomUUID();
-    const amountInPaisa = totalAmount * 100;
-    const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?order_id=${merchantTransactionId}`;
+          // For PhonePe, only create pending order record with minimal data
+          const merchantTransactionId = randomUUID();
+          const amountInPaisa = totalAmount * 100;
+          const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?transaction_id=${merchantTransactionId}`;
 
-    // Create temporary order data without saving to DB
-    const orderData = {
-        merchantTransactionId,
-        userId,
-        cartItems: cart.items,
-        subtotal,
-        platformFee: platformFeeAmount,
-        totalAmount,
-        shippingAddressId,
-        paymentMethod,
-        vendorOrders
-    };
-
-    // Store temporary order data (use Redis or in-memory cache)
-    await cache.set(`temp_order:${merchantTransactionId}`, JSON.stringify(orderData), 3600); // 1 hour expiry
-
-    const metaInfo = {
-        udf1: "order",
-        udf2: merchantTransactionId // Pass the temp order ID
-    };
-
-    const payRequest = StandardCheckoutPayRequest.builder()
-        .merchantOrderId(merchantTransactionId)
-        .amount(amountInPaisa)
-        .redirectUrl(redirectUrl)
-        .metaInfo(metaInfo)
-        .build();
-
-    const phonepeResponse = await phonePeClient.pay(payRequest);
-
-    responseData = {
-        message: "Proceed to PhonePe Payment",
-        paymentUrl: phonepeResponse.redirectUrl,
-        tempOrderId: merchantTransactionId, // Return temp ID instead
-        subtotal,
-        platformFee: platformFeeAmount,
-        totalAmount
-    };
-}
-      else {
-          responseData = {
-              message: "Payment method not implemented yet",
-              mainOrderId: mainOrder._id,
-              orders: createdOrders,
+          // Create a temporary pending order record (not the full order)
+          const pendingOrder = new MainOrder({
+              user: userId,
               subtotal,
               platformFee: platformFeeAmount,
               totalAmount,
-              shiprocketResponses,
-          };
-      }
+              paymentMethod,
+              paymentStatus: "Pending", // Keep as pending until payment confirmed
+              orderStatus: "Pending", // Keep as pending until payment confirmed
+              shippingAddress: shippingAddressId,
+              phonepeTransactionId: merchantTransactionId,
+              subOrders: [], // Empty initially
+              isPendingPayment: true, // Add this flag to identify pending payment orders
+          });
 
-      // Send a single response at the end
-      res.status(201).json(responseData);
+          await pendingOrder.save();
+
+          // Store cart data temporarily for order creation after payment
+          // You can store this in Redis or create a separate PendingOrder collection
+          // For now, let's add cart data to the pending order
+          pendingOrder.pendingCartData = {
+              vendorOrders,
+              shippingAddress: shippingAddressId
+          };
+          await pendingOrder.save();
+
+          const metaInfo = {
+              udf1: "order",
+              udf2: userId
+          };
+
+          const payRequest = StandardCheckoutPayRequest.builder()
+              .merchantOrderId(merchantTransactionId)
+              .amount(amountInPaisa)
+              .redirectUrl(redirectUrl)
+              .metaInfo(metaInfo)
+              .build();
+
+          const phonepeResponse = await phonePeClient.pay(payRequest);
+
+          return res.status(201).json({
+              message: "Proceed to PhonePe Payment",
+              paymentUrl: phonepeResponse.redirectUrl,
+              pendingOrderId: pendingOrder._id, // Return pending order ID
+              subtotal,
+              platformFee: platformFeeAmount,
+              totalAmount,
+              phonepeTransactionId: merchantTransactionId,
+          });
+      } 
+      else {
+          return res.status(400).json({
+              message: "Payment method not implemented yet"
+          });
+      }
 
   } catch (error) {
     console.error("Error placing order:", {
@@ -416,7 +372,70 @@ exports.placeOrder = async (req, res) => {
       }
   }
 };
-// PhonePe Webhook Handler
+
+// Helper function to create orders in database
+async function createOrdersInDatabase(userId, subtotal, platformFeeAmount, totalAmount, paymentMethod, shippingAddressId, vendorOrders) {
+    // Create Main Order
+    const mainOrder = new MainOrder({
+        user: userId,
+        subtotal,
+        platformFee: platformFeeAmount,
+        totalAmount,
+        paymentMethod,
+        paymentStatus: paymentMethod === "COD" ? "Pending" : "Completed",
+        orderStatus: "Processing",
+        shippingAddress: shippingAddressId,
+        subOrders: [],
+    });
+
+    await mainOrder.save();
+
+    // Create vendor orders
+    const createdOrders = [];
+    for (const vendorId in vendorOrders) {
+        const orderData = vendorOrders[vendorId];
+
+        const newOrder = new Order({
+            mainOrderId: mainOrder._id,
+            user: userId,
+            vendor: vendorId,
+            items: orderData.items,
+            totalPrice: orderData.totalPrice,
+            paymentMethod,
+            paymentStatus: paymentMethod === "COD" ? "Pending" : "Completed",
+            orderStatus: "Processing",
+            shippingAddress: shippingAddressId,
+        });
+
+        await newOrder.save();
+        createdOrders.push(newOrder._id);
+    }
+
+    // Update Main Order with subOrders
+    mainOrder.subOrders = createdOrders;
+    await mainOrder.save();
+
+    return { mainOrder, createdOrders };
+}
+
+// Helper function to create Shiprocket shipments
+async function createShiprocketShipments(createdOrders, mainOrder, shippingAddress, userId) {
+    const shiprocketResponses = [];
+    for (const subOrderId of createdOrders) {
+        const subOrder = await Order.findById(subOrderId).populate('items.product');
+
+        const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
+
+        subOrder.shiprocketOrderId = response.order_id;
+        subOrder.shiprocketShipmentId = response.shipment_id;
+        await subOrder.save();
+
+        shiprocketResponses.push(response);
+    }
+    return shiprocketResponses;
+}
+
+// Updated PhonePe Webhook Handler
 exports.phonepeWebhook = async (req, res) => {
     try {
         const authorizationHeader = req.headers.authorization;
@@ -426,196 +445,122 @@ exports.phonepeWebhook = async (req, res) => {
             return res.status(401).json({ message: "Authorization header missing" });
         }
 
-        // Validate the callback
-        const callbackResponse = phonePeClient.validateCallback(
-            PHONEPE_CALLBACK_USERNAME,
-            PHONEPE_CALLBACK_PASSWORD,
-            authorizationHeader,
-            callbackBody
-        );
-
-        // Extract order information
-        const merchantOrderId = callbackResponse.payload.orderId;
-        const state = callbackResponse.payload.state;
-
-        if (state === 'checkout.order.completed') {
-            // Retrieve the temporary order data from cache
-            const tempOrderData = await cache.get(`temp_order:${merchantOrderId}`);
-            if (!tempOrderData) {
-                return res.status(400).json({ message: "Order data not found or expired" });
-            }
-            
-            const order = JSON.parse(tempOrderData);
-            
-            // Validate shipping address
-            const shippingAddress = await Address.findById(order.shippingAddressId);
-            if (!shippingAddress) {
-                return res.status(400).json({ message: "Invalid shipping address" });
-            }
-
-            // Create Main Order
-            const mainOrder = new MainOrder({
-                user: order.userId,
-                subtotal: order.subtotal,
-                platformFee: order.platformFee,
-                totalAmount: order.totalAmount,
-                paymentMethod: order.paymentMethod,
-                paymentStatus: 'Completed',
-                orderStatus: 'Confirmed',
-                shippingAddress: order.shippingAddressId,
-                phonepeTransactionId: merchantOrderId,
-                subOrders: []
-            });
-
-            await mainOrder.save();
-
-            // Create vendor orders
-            const createdOrders = [];
-            for (const vendorId in order.vendorOrders) {
-                const orderData = order.vendorOrders[vendorId];
-
-                const newOrder = new Order({
-                    mainOrderId: mainOrder._id,
-                    user: order.userId,
-                    vendor: vendorId,
-                    items: orderData.items,
-                    totalPrice: orderData.totalPrice,
-                    paymentMethod: order.paymentMethod,
-                    paymentStatus: 'Completed',
-                    orderStatus: 'Confirmed',
-                    shippingAddress: order.shippingAddressId
-                });
-
-                await newOrder.save();
-                createdOrders.push(newOrder._id);
-                
-                // Create Shiprocket shipment
-                const response = await createShiprocketOrder(newOrder, mainOrder, shippingAddress, order.userId);
-                newOrder.shiprocketOrderId = response.order_id;
-                newOrder.shiprocketShipmentId = response.shipment_id;
-                await newOrder.save();
-            }
-
-            // Update Main Order with subOrders
-            mainOrder.subOrders = createdOrders;
-            await mainOrder.save();
-
-            // Clear cart and temp order data
-            await Cart.findOneAndUpdate(
-                { user: order.userId },
-                { items: [], totalPrice: 0, coupon: null }
+        try {
+            const callbackResponse = phonePeClient.validateCallback(
+                PHONEPE_CALLBACK_USERNAME,
+                PHONEPE_CALLBACK_PASSWORD,
+                authorizationHeader,
+                callbackBody
             );
-            await cache.del(`temp_order:${merchantOrderId}`);
 
-            return res.status(200).json({ status: "Success" });
-        } 
-        else if (state === 'checkout.order.failed' || state === 'checkout.transaction.attempt.failed') {
-            // Payment failed - just clear the temporary order data
-            await cache.del(`temp_order:${merchantOrderId}`);
-            return res.status(200).json({ status: "Success" });
-        }
+            const merchantTransactionId = callbackResponse.payload.orderId;
+            const state = callbackResponse.payload.state;
 
-        // For other states, just acknowledge
-        return res.status(200).json({ status: "Success" });
+            // Find the pending order by transaction ID
+            const pendingOrder = await MainOrder.findOne({ phonepeTransactionId: merchantTransactionId });
 
-    } catch (error) {
-        console.error("PhonePe webhook error:", {
-            message: error.message,
-            stack: error.stack,
-            request: {
-                headers: req.headers,
-                body: req.body
+            if (!pendingOrder) {
+                console.error("Pending order not found for transaction:", merchantTransactionId);
+                return res.status(404).json({ message: "Order not found" });
             }
-        });
 
-        if (error.name === 'ValidationError') {
+            if (state === 'checkout.order.completed') {
+                // Payment successful - now create the actual orders
+                const { createdOrders } = await createOrdersInDatabase(
+                    pendingOrder.user,
+                    pendingOrder.subtotal,
+                    pendingOrder.platformFee,
+                    pendingOrder.totalAmount,
+                    pendingOrder.paymentMethod,
+                    pendingOrder.shippingAddress,
+                    pendingOrder.pendingCartData.vendorOrders
+                );
+
+                // Update the main order
+                pendingOrder.paymentStatus = 'Completed';
+                pendingOrder.orderStatus = 'Processing';
+                pendingOrder.subOrders = createdOrders;
+                pendingOrder.isPendingPayment = false;
+                // Remove pending cart data
+                pendingOrder.pendingCartData = undefined;
+                await pendingOrder.save();
+
+                // Create Shiprocket shipments
+                const shippingAddress = await Address.findById(pendingOrder.shippingAddress);
+                await createShiprocketShipments(createdOrders, pendingOrder, shippingAddress, pendingOrder.user);
+
+                // Clear the cart
+                await Cart.findOneAndUpdate(
+                    { user: pendingOrder.user },
+                    { items: [], totalPrice: 0, coupon: null }
+                );
+
+            } else if (state === 'checkout.order.failed' || state === 'checkout.transaction.attempt.failed') {
+                // Payment failed - mark as failed but don't create sub-orders
+                pendingOrder.paymentStatus = 'Failed';
+                pendingOrder.orderStatus = 'Failed';
+                await pendingOrder.save();
+            }
+
+            return res.status(200).json({ status: "Success" });
+
+        } catch (validationError) {
+            console.error("PhonePe callback validation error:", validationError);
             return res.status(401).json({ message: "Invalid callback" });
         }
-
-        return res.status(500).json({ 
-            message: "Error processing webhook", 
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+    } catch (error) {
+        console.error("PhonePe webhook error:", error);
+        return res.status(500).json({ message: "Error processing webhook", error: error.message });
     }
 };
 
-// Check payment status endpoint
+// Updated Check payment status endpoint
 exports.checkPaymentStatus = async (req, res) => {
     try {
-        const { orderId } = req.params;
+        const { orderId, transactionId } = req.params;
 
-        if (!orderId) {
-            return res.status(400).json({ message: "Order ID is required" });
+        let mainOrder;
+        
+        // Find order by either orderId or transactionId
+        if (orderId) {
+            mainOrder = await MainOrder.findById(orderId);
+        } else if (transactionId) {
+            mainOrder = await MainOrder.findOne({ phonepeTransactionId: transactionId });
         }
-
-        // First check if this is a temporary order ID (before payment completion)
-        const tempOrderData = await cache.get(`temp_order:${orderId}`);
-        if (tempOrderData) {
-            return res.status(200).json({
-                status: "pending",
-                paymentStatus: "processing",
-                message: "Payment still in progress"
-            });
-        }
-
-        // Check for completed orders
-        const mainOrder = await MainOrder.findOne({ 
-            $or: [
-                { _id: orderId },
-                { phonepeTransactionId: orderId }
-            ]
-        }).populate('subOrders');
 
         if (!mainOrder) {
             return res.status(404).json({ message: "Order not found" });
         }
 
-        // If payment was already marked as completed
-        if (mainOrder.paymentStatus === 'Completed') {
-            return res.status(200).json({
-                status: "completed",
-                paymentStatus: "completed",
-                orderStatus: mainOrder.orderStatus,
-                mainOrderId: mainOrder._id,
-                subOrders: mainOrder.subOrders,
-                amount: mainOrder.totalAmount,
-                paymentMethod: mainOrder.paymentMethod
-            });
-        }
-
-        // If payment was marked as failed
-        if (mainOrder.paymentStatus === 'Failed') {
-            return res.status(200).json({
-                status: "failed",
-                paymentStatus: "failed",
-                orderStatus: "failed",
-                mainOrderId: mainOrder._id,
-                amount: mainOrder.totalAmount,
-                paymentMethod: mainOrder.paymentMethod
-            });
-        }
-
-        // If status is still pending/processing, check with PhonePe
         if (mainOrder.phonepeTransactionId) {
             try {
                 const statusResponse = await phonePeClient.getOrderStatus(mainOrder.phonepeTransactionId);
                 const phonepeStatus = statusResponse.state;
 
-                // Update the order status based on PhonePe response
-                if (phonepeStatus === "COMPLETED" && mainOrder.paymentStatus !== "Completed") {
-                    await MainOrder.findByIdAndUpdate(mainOrder._id, {
-                        paymentStatus: 'Completed',
-                        orderStatus: 'Confirmed'
-                    });
-
-                    await Order.updateMany(
-                        { mainOrderId: mainOrder._id },
-                        {
-                            paymentStatus: 'Completed',
-                            orderStatus: 'Confirmed'
-                        }
+                // Update the order in DB if payment completed and orders not yet created
+                if (phonepeStatus === "COMPLETED" && mainOrder.isPendingPayment) {
+                    // Create the actual orders
+                    const { createdOrders } = await createOrdersInDatabase(
+                        mainOrder.user,
+                        mainOrder.subtotal,
+                        mainOrder.platformFee,
+                        mainOrder.totalAmount,
+                        mainOrder.paymentMethod,
+                        mainOrder.shippingAddress,
+                        mainOrder.pendingCartData.vendorOrders
                     );
+
+                    // Update main order
+                    mainOrder.paymentStatus = "Completed";
+                    mainOrder.orderStatus = "Processing";
+                    mainOrder.subOrders = createdOrders;
+                    mainOrder.isPendingPayment = false;
+                    mainOrder.pendingCartData = undefined;
+                    await mainOrder.save();
+
+                    // Create Shiprocket shipments
+                    const shippingAddress = await Address.findById(mainOrder.shippingAddress);
+                    await createShiprocketShipments(createdOrders, mainOrder, shippingAddress, mainOrder.user);
 
                     // Clear the cart
                     await Cart.findOneAndUpdate(
@@ -623,70 +568,44 @@ exports.checkPaymentStatus = async (req, res) => {
                         { items: [], totalPrice: 0, coupon: null }
                     );
                 }
-                else if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") && 
-                        mainOrder.paymentStatus !== "Failed") {
-                    await MainOrder.findByIdAndUpdate(mainOrder._id, {
-                        paymentStatus: 'Failed',
-                        orderStatus: 'Failed'
-                    });
 
-                    await Order.updateMany(
-                        { mainOrderId: mainOrder._id },
-                        {
-                            paymentStatus: 'Failed',
-                            orderStatus: 'Failed'
-                        }
-                    );
+                if (
+                    (phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
+                    mainOrder.paymentStatus !== "Failed"
+                ) {
+                    mainOrder.paymentStatus = "Failed";
+                    mainOrder.orderStatus = "Failed";
+                    await mainOrder.save();
                 }
 
                 return res.status(200).json({
-                    status: phonepeStatus.toLowerCase(),
-                    paymentStatus: phonepeStatus === "COMPLETED" ? "completed" : 
-                                    (phonepeStatus === "FAILED" ? "failed" : "processing"),
-                    orderStatus: phonepeStatus === "COMPLETED" ? "confirmed" : 
-                                (phonepeStatus === "FAILED" ? "failed" : "processing"),
-                    mainOrderId: mainOrder._id,
-                    amount: mainOrder.totalAmount,
-                    paymentMethod: mainOrder.paymentMethod
+                    orderId: mainOrder._id,
+                    paymentStatus: phonepeStatus === "COMPLETED" ? "Completed" : mainOrder.paymentStatus,
+                    orderStatus: phonepeStatus === "COMPLETED" ? "Processing" : mainOrder.orderStatus,
+                    phonepeStatus,
+                    hasSubOrders: mainOrder.subOrders && mainOrder.subOrders.length > 0
                 });
-
             } catch (phonepeError) {
-                console.error("Error checking PhonePe status:", phonepeError);
-                // Return current status if PhonePe check fails
+                console.error("Error getting PhonePe status:", phonepeError);
                 return res.status(200).json({
-                    status: "unknown",
-                    paymentStatus: mainOrder.paymentStatus.toLowerCase(),
-                    orderStatus: mainOrder.orderStatus.toLowerCase(),
-                    mainOrderId: mainOrder._id,
-                    amount: mainOrder.totalAmount,
-                    paymentMethod: mainOrder.paymentMethod,
-                    message: "Unable to verify payment status with PhonePe"
+                    orderId: mainOrder._id,
+                    paymentStatus: mainOrder.paymentStatus,
+                    orderStatus: mainOrder.orderStatus,
+                    phonepeStatus: "Error fetching status"
                 });
             }
         }
 
-        // Default response for orders without PhonePe transaction ID
+        // For non-PhonePe orders, return current status
         return res.status(200).json({
-            status: mainOrder.paymentStatus.toLowerCase(),
-            paymentStatus: mainOrder.paymentStatus.toLowerCase(),
-            orderStatus: mainOrder.orderStatus.toLowerCase(),
-            mainOrderId: mainOrder._id,
-            amount: mainOrder.totalAmount,
-            paymentMethod: mainOrder.paymentMethod
+            orderId: mainOrder._id,
+            paymentStatus: mainOrder.paymentStatus,
+            orderStatus: mainOrder.orderStatus
         });
-
+        
     } catch (error) {
-        console.error("Error checking payment status:", {
-            message: error.message,
-            stack: error.stack,
-            orderId: req.params.orderId
-        });
-
-        return res.status(500).json({ 
-            message: "Error checking payment status", 
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        console.error("Error checking payment status:", error);
+        res.status(500).json({ message: "Error checking payment status", error: error.message });
     }
 };
 

@@ -47,6 +47,14 @@ const mainOrderSchema = new mongoose.Schema(
         ref: "Order",
       },
     ],
+     isPendingPayment: {
+      type: Boolean,
+      default: false,
+    },
+    pendingCartData: {
+      type: mongoose.Schema.Types.Mixed, // Stores vendor orders and cart data temporarily
+      default: null,
+    },
   },
   { timestamps: true }
 );
