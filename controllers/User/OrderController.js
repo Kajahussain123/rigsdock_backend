@@ -4,12 +4,18 @@ const Address = require("../../models/User/AddressModel");
 const MainOrder = require("../../models/User/MainOrderModel");
 const axios = require("axios");
 const mongoose = require("mongoose");
-const crypto = require('crypto');
+const crypto = require("crypto");
 const PlatformFee = require("../../models/admin/PlatformFeeModel");
 const Vendor = require("../../models/Vendor/vendorModel");
-const { StandardCheckoutClient, Env, StandardCheckoutPayRequest } = require('pg-sdk-node');
-const { randomUUID } = require('crypto');
-const { createShiprocketOrder } = require('../../controllers/Shiprocket/ShipRocketController');
+const {
+  StandardCheckoutClient,
+  Env,
+  StandardCheckoutPayRequest,
+} = require("pg-sdk-node");
+const { randomUUID } = require("crypto");
+const {
+  createShiprocketOrder,
+} = require("../../controllers/Shiprocket/ShipRocketController");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
@@ -21,19 +27,19 @@ const {
   searchCustomerInZoho,
 } = require("../../utils/zohoBooksService");
 
-
 const PHONEPE_CLIENT_ID = process.env.PHONEPE_CLIENT_ID;
 const PHONEPE_CLIENT_SECRET = process.env.PHONEPE_CLIENT_SECRET;
 const PHONEPE_CLIENT_VERSION = 1;
-const PHONEPE_ENV = process.env.NODE_ENV === 'production' ? Env.PRODUCTION : Env.SANDBOX;
+const PHONEPE_ENV =
+  process.env.NODE_ENV === "production" ? Env.PRODUCTION : Env.SANDBOX;
 const PHONEPE_CALLBACK_USERNAME = process.env.PHONEPE_CALLBACK_USERNAME;
 const PHONEPE_CALLBACK_PASSWORD = process.env.PHONEPE_CALLBACK_PASSWORD;
 
 const phonePeClient = StandardCheckoutClient.getInstance(
-    PHONEPE_CLIENT_ID,
-    PHONEPE_CLIENT_SECRET,
-    PHONEPE_CLIENT_VERSION,
-    PHONEPE_ENV
+  PHONEPE_CLIENT_ID,
+  PHONEPE_CLIENT_SECRET,
+  PHONEPE_CLIENT_VERSION,
+  PHONEPE_ENV
 );
 
 // exports.placeOrder = async (req, res) => {
@@ -149,7 +155,7 @@ const phonePeClient = StandardCheckoutClient.getInstance(
 //               orders: createdOrders,
 //               shiprocketResponses,
 //           };
-//       } 
+//       }
 //       else if (paymentMethod === "PhonePe") {
 //           const merchantTransactionId = randomUUID();
 //           const amountInPaisa = totalAmount * 100;
@@ -168,7 +174,7 @@ const phonePeClient = StandardCheckoutClient.getInstance(
 //               .build();
 
 //           const phonepeResponse = await phonePeClient.pay(payRequest);
-          
+
 //           mainOrder.phonepeTransactionId = merchantTransactionId;
 //           await mainOrder.save();
 
@@ -180,7 +186,7 @@ const phonePeClient = StandardCheckoutClient.getInstance(
 //               phonepeTransactionId: merchantTransactionId,
 //               shiprocketResponses,
 //           };
-//       } 
+//       }
 //       else {
 //           responseData = {
 //               message: "Payment method not implemented yet",
@@ -196,8 +202,8 @@ const phonePeClient = StandardCheckoutClient.getInstance(
 //   } catch (error) {
 //       console.error("Error placing order:", error);
 //       if (!res.headersSent) {
-//           res.status(500).json({ 
-//               message: "Error placing order", 
+//           res.status(500).json({
+//               message: "Error placing order",
 //               error: error.message,
 //               stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
 //           });
@@ -207,172 +213,197 @@ const phonePeClient = StandardCheckoutClient.getInstance(
 
 exports.placeOrder = async (req, res) => {
   try {
-      const { userId, shippingAddressId, paymentMethod } = req.body;
+    const { userId, shippingAddressId, paymentMethod } = req.body;
 
-      // Fetch user's cart
-      const cart = await Cart.findOne({ user: userId }).populate("items.product");
+    // Fetch user's cart
+    const cart = await Cart.findOne({ user: userId }).populate("items.product");
 
-      if (!cart || cart.items.length === 0) {
-          return res.status(400).json({ message: "Cart is empty" });
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ message: "Cart is empty" });
+    }
+
+    // Validate shipping address
+    const shippingAddress = await Address.findById(shippingAddressId);
+    if (!shippingAddress) {
+      return res.status(400).json({ message: "Invalid shipping address" });
+    }
+
+    // Validate payment method
+    const validPaymentMethods = [
+      "COD",
+      "PhonePe",
+      "Credit Card",
+      "Debit Card",
+      "UPI",
+    ];
+    if (!validPaymentMethods.includes(paymentMethod)) {
+      return res.status(400).json({ message: "Invalid payment method" });
+    }
+
+    // Fetch platform fee
+    const platformFee = await PlatformFee.findOne().sort({ createdAt: -1 });
+    if (!platformFee) {
+      console.error("Platform fee not configured");
+      return res
+        .status(500)
+        .json({ message: "Platform fee configuration not found" });
+    }
+
+    // Group items by vendor
+    const vendorOrders = {};
+    let subtotal = 0;
+
+    cart.items.forEach((item) => {
+      const vendorId = item.product.owner
+        ? item.product.owner.toString()
+        : null;
+      if (!vendorId) {
+        console.error("Error: Product missing owner field", item.product);
+        return;
       }
 
-      // Validate shipping address
-      const shippingAddress = await Address.findById(shippingAddressId);
-      if (!shippingAddress) {
-          return res.status(400).json({ message: "Invalid shipping address" });
+      if (!vendorOrders[vendorId]) {
+        vendorOrders[vendorId] = { vendor: vendorId, items: [], totalPrice: 0 };
       }
 
-      // Validate payment method
-      const validPaymentMethods = ["COD", "PhonePe", "Credit Card", "Debit Card", "UPI"];
-      if (!validPaymentMethods.includes(paymentMethod)) {
-          return res.status(400).json({ message: "Invalid payment method" });
-      }
-
-      // Fetch platform fee
-      const platformFee = await PlatformFee.findOne().sort({ createdAt: -1 });
-      if (!platformFee) {
-          console.error("Platform fee not configured");
-          return res.status(500).json({ message: "Platform fee configuration not found" });
-      }
-
-      // Group items by vendor
-      const vendorOrders = {};
-      let subtotal = 0;
-
-      cart.items.forEach(item => {
-          const vendorId = item.product.owner ? item.product.owner.toString() : null;
-          if (!vendorId) {
-              console.error("Error: Product missing owner field", item.product);
-              return;
-          }
-
-          if (!vendorOrders[vendorId]) {
-              vendorOrders[vendorId] = { vendor: vendorId, items: [], totalPrice: 0 };
-          }
-
-          vendorOrders[vendorId].items.push({
-              product: item.product._id,
-              quantity: item.quantity,
-              price: item.price,
-          });
-
-          vendorOrders[vendorId].totalPrice += item.price * item.quantity;
-          subtotal += item.price * item.quantity;
+      vendorOrders[vendorId].items.push({
+        product: item.product._id,
+        quantity: item.quantity,
+        price: item.price,
       });
 
-      // Calculate platform fee
-      let platformFeeAmount = 0;
-      if (platformFee.feeType === "fixed") {
-          platformFeeAmount = platformFee.amount;
-      } else if (platformFee.feeType === "percentage") {
-          platformFeeAmount = (subtotal * platformFee.amount) / 100;
-      }
+      vendorOrders[vendorId].totalPrice += item.price * item.quantity;
+      subtotal += item.price * item.quantity;
+    });
 
-      // Calculate total amount including platform fee
-      const totalAmount = subtotal + platformFeeAmount;
+    // Calculate platform fee
+    let platformFeeAmount = 0;
+    if (platformFee.feeType === "fixed") {
+      platformFeeAmount = platformFee.amount;
+    } else if (platformFee.feeType === "percentage") {
+      platformFeeAmount = (subtotal * platformFee.amount) / 100;
+    }
 
-      // Handle different payment methods
-      if (paymentMethod === "COD") {
-          // For COD, create order immediately since payment is guaranteed
-          const { mainOrder, createdOrders } = await createOrdersInDatabase(
-              userId, subtotal, platformFeeAmount, totalAmount, paymentMethod, 
-              shippingAddressId, vendorOrders
-          );
+    // Calculate total amount including platform fee
+    const totalAmount = subtotal + platformFeeAmount;
 
-          // Create Shiprocket shipments
-          const shiprocketResponses = await createShiprocketShipments(createdOrders, mainOrder, shippingAddress, userId);
+    // Handle different payment methods
+    if (paymentMethod === "COD") {
+      // For COD, create order immediately since payment is guaranteed
+      const { mainOrder, createdOrders } = await createOrdersInDatabase(
+        userId,
+        subtotal,
+        platformFeeAmount,
+        totalAmount,
+        paymentMethod,
+        shippingAddressId,
+        vendorOrders
+      );
 
-          // Clear cart
-          await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
+      // Create Shiprocket shipments
+      const shiprocketResponses = await createShiprocketShipments(
+        createdOrders,
+        mainOrder,
+        shippingAddress,
+        userId
+      );
 
-          return res.status(201).json({
-              message: "Order placed successfully with Cash on Delivery",
-              mainOrderId: mainOrder._id,
-              orders: createdOrders,
-              subtotal,
-              platformFee: platformFeeAmount,
-              totalAmount,
-              shiprocketResponses,
-          });
-      } 
-      else if (paymentMethod === "PhonePe") {
-          // For PhonePe, only create pending order record with minimal data
-          const merchantTransactionId = randomUUID();
-          const amountInPaisa = totalAmount * 100;
-          const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?transaction_id=${merchantTransactionId}`;
+      // Clear cart
+      await Cart.findOneAndUpdate(
+        { user: userId },
+        { items: [], totalPrice: 0, coupon: null }
+      );
 
-          // Create a temporary pending order record (not the full order)
-          const pendingOrder = new MainOrder({
-              user: userId,
-              subtotal,
-              platformFee: platformFeeAmount,
-              totalAmount,
-              paymentMethod,
-              paymentStatus: "Pending", // Keep as pending until payment confirmed
-              orderStatus: "Pending", // Keep as pending until payment confirmed
-              shippingAddress: shippingAddressId,
-              phonepeTransactionId: merchantTransactionId.toString(), // Ensure it's a string
-              subOrders: [], // Empty initially
-              isPendingPayment: true, // Add this flag to identify pending payment orders
-          });
+      return res.status(201).json({
+        message: "Order placed successfully with Cash on Delivery",
+        mainOrderId: mainOrder._id,
+        orders: createdOrders,
+        subtotal,
+        platformFee: platformFeeAmount,
+        totalAmount,
+        shiprocketResponses,
+      });
+    } else if (paymentMethod === "PhonePe") {
+      // For PhonePe, only create pending order record with minimal data
+      const merchantTransactionId = randomUUID();
+      const amountInPaisa = totalAmount * 100;
+      const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?transaction_id=${merchantTransactionId}`;
 
-          await pendingOrder.save();
+      // Create a temporary pending order record (not the full order)
+      const pendingOrder = new MainOrder({
+        user: userId,
+        subtotal,
+        platformFee: platformFeeAmount,
+        totalAmount,
+        paymentMethod,
+        paymentStatus: "Pending", // Keep as pending until payment confirmed
+        orderStatus: "Pending", // Keep as pending until payment confirmed
+        shippingAddress: shippingAddressId,
+        phonepeTransactionId: merchantTransactionId.toString(), // Ensure it's a string
+        subOrders: [], // Empty initially
+        isPendingPayment: true, // Add this flag to identify pending payment orders
+      });
 
-          // Store cart data temporarily for order creation after payment
-          pendingOrder.pendingCartData = {
-              vendorOrders,
-              shippingAddress: shippingAddressId
-          };
-          await pendingOrder.save();
+      await pendingOrder.save();
 
-          const metaInfo = {
-              udf1: "order",
-              udf2: userId
-          };
+      // Store cart data temporarily for order creation after payment
+      pendingOrder.pendingCartData = {
+        vendorOrders,
+        shippingAddress: shippingAddressId,
+      };
+      await pendingOrder.save();
 
-          const payRequest = StandardCheckoutPayRequest.builder()
-              .merchantOrderId(merchantTransactionId)
-              .amount(amountInPaisa)
-              .redirectUrl(redirectUrl)
-              .metaInfo(metaInfo)
-              .build();
+      const metaInfo = {
+        udf1: "order",
+        udf2: userId,
+      };
 
-          const phonepeResponse = await phonePeClient.pay(payRequest);
+      const payRequest = StandardCheckoutPayRequest.builder()
+        .merchantOrderId(merchantTransactionId)
+        .amount(amountInPaisa)
+        .redirectUrl(redirectUrl)
+        .metaInfo(metaInfo)
+        .build();
 
-          return res.status(201).json({
-              message: "Proceed to PhonePe Payment",
-              paymentUrl: phonepeResponse.redirectUrl,
-              pendingOrderId: pendingOrder._id, // Return pending order ID
-              subtotal,
-              platformFee: platformFeeAmount,
-              totalAmount,
-              phonepeTransactionId: merchantTransactionId,
-          });
-      } 
-      else {
-          return res.status(400).json({
-              message: "Payment method not implemented yet"
-          });
-      }
+      const phonepeResponse = await phonePeClient.pay(payRequest);
 
+      return res.status(201).json({
+        message: "Proceed to PhonePe Payment",
+        paymentUrl: phonepeResponse.redirectUrl,
+        pendingOrderId: pendingOrder._id, // Return pending order ID
+        subtotal,
+        platformFee: platformFeeAmount,
+        totalAmount,
+        phonepeTransactionId: merchantTransactionId,
+      });
+    } else {
+      return res.status(400).json({
+        message: "Payment method not implemented yet",
+      });
+    }
   } catch (error) {
     console.error("Error placing order:", {
       message: error.message,
       response: error.response?.data,
       status: error.response?.status,
     });
-      if (!res.headersSent) {
-          res.status(500).json({ 
-              message: "Error placing order", 
-              error: error.message,
-              stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-          });
-      }
+    if (!res.headersSent) {
+      res.status(500).json({
+        message: "Error placing order",
+        error: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      });
+    }
   }
 };
 
 // Helper function to create orders in database
-async function createOrdersInDatabase(userId, subtotal, platformFeeAmount, totalAmount, paymentMethod, shippingAddressId, vendorOrders) {
+async function createOrdersInDatabase(
+    userId, subtotal, platformFeeAmount, totalAmount, 
+    paymentMethod, shippingAddressId, vendorOrders, session = null
+) {
+    const options = session ? { session } : {};
+    
     // Create Main Order
     const mainOrder = new MainOrder({
         user: userId,
@@ -380,13 +411,13 @@ async function createOrdersInDatabase(userId, subtotal, platformFeeAmount, total
         platformFee: platformFeeAmount,
         totalAmount,
         paymentMethod,
-        paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid", // Changed from "Completed" to "Paid"
+        paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
         orderStatus: "Processing",
         shippingAddress: shippingAddressId,
         subOrders: [],
     });
 
-    await mainOrder.save();
+    await mainOrder.save(options);
 
     // Create vendor orders
     const createdOrders = [];
@@ -400,301 +431,490 @@ async function createOrdersInDatabase(userId, subtotal, platformFeeAmount, total
             items: orderData.items,
             totalPrice: orderData.totalPrice,
             paymentMethod,
-            paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid", // Changed from "Completed" to "Paid"
+            paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
             orderStatus: "Processing",
             shippingAddress: shippingAddressId,
         });
 
-        await newOrder.save();
+        await newOrder.save(options);
         createdOrders.push(newOrder._id);
     }
 
     // Update Main Order with subOrders
     mainOrder.subOrders = createdOrders;
-    await mainOrder.save();
+    await mainOrder.save(options);
 
     return { mainOrder, createdOrders };
 }
 
 // Helper function to create Shiprocket shipments
-async function createShiprocketShipments(createdOrders, mainOrder, shippingAddress, userId) {
-    const shiprocketResponses = [];
-    for (const subOrderId of createdOrders) {
-        const subOrder = await Order.findById(subOrderId).populate('items.product');
+async function createShiprocketShipments(
+  createdOrders,
+  mainOrder,
+  shippingAddress,
+  userId
+) {
+  const shiprocketResponses = [];
+  for (const subOrderId of createdOrders) {
+    const subOrder = await Order.findById(subOrderId).populate("items.product");
 
-        const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
+    const response = await createShiprocketOrder(
+      subOrder,
+      mainOrder,
+      shippingAddress,
+      userId
+    );
 
-        subOrder.shiprocketOrderId = response.order_id;
-        subOrder.shiprocketShipmentId = response.shipment_id;
-        await subOrder.save();
+    subOrder.shiprocketOrderId = response.order_id;
+    subOrder.shiprocketShipmentId = response.shipment_id;
+    await subOrder.save();
 
-        shiprocketResponses.push(response);
-    }
-    return shiprocketResponses;
+    shiprocketResponses.push(response);
+  }
+  return shiprocketResponses;
 }
 
 // Updated PhonePe Webhook Handler
 exports.phonepeWebhook = async (req, res) => {
-    try {
-        const authorizationHeader = req.headers.authorization;
-        const callbackBody = JSON.stringify(req.body);
-
-        if (!authorizationHeader) {
-            return res.status(401).json({ message: "Authorization header missing" });
-        }
-
-        try {
-            const callbackResponse = phonePeClient.validateCallback(
-                PHONEPE_CALLBACK_USERNAME,
-                PHONEPE_CALLBACK_PASSWORD,
-                authorizationHeader,
-                callbackBody
-            );
-
-            const merchantTransactionId = callbackResponse.payload.orderId;
-            const state = callbackResponse.payload.state;
-
-            console.log(`Webhook received - Transaction: ${merchantTransactionId}, State: ${state}`);
-
-            // Find the pending order by transaction ID (ensure we're querying string field)
-            const pendingOrder = await MainOrder.findOne({ 
-                phonepeTransactionId: merchantTransactionId.toString() // Ensure string comparison
-            });
-
-            if (!pendingOrder) {
-                console.error("Pending order not found for transaction:", merchantTransactionId);
-                return res.status(404).json({ message: "Order not found" });
-            }
-
-            if (state === 'checkout.order.completed') {
-                // Payment successful - now create the actual orders
-                const { createdOrders } = await createOrdersInDatabase(
-                    pendingOrder.user,
-                    pendingOrder.subtotal,
-                    pendingOrder.platformFee,
-                    pendingOrder.totalAmount,
-                    pendingOrder.paymentMethod,
-                    pendingOrder.shippingAddress,
-                    pendingOrder.pendingCartData.vendorOrders
-                );
-
-                // Update the main order
-                pendingOrder.paymentStatus = 'Paid'; // Changed from 'Completed' to 'Paid'
-                pendingOrder.orderStatus = 'Processing';
-                pendingOrder.subOrders = createdOrders;
-                pendingOrder.isPendingPayment = false;
-                // Remove pending cart data
-                pendingOrder.pendingCartData = undefined;
-                await pendingOrder.save();
-
-                // Create Shiprocket shipments
-                const shippingAddress = await Address.findById(pendingOrder.shippingAddress);
-                await createShiprocketShipments(createdOrders, pendingOrder, shippingAddress, pendingOrder.user);
-
-                // Clear the cart
-                await Cart.findOneAndUpdate(
-                    { user: pendingOrder.user },
-                    { items: [], totalPrice: 0, coupon: null }
-                );
-
-                console.log(`Order completed successfully for transaction: ${merchantTransactionId}`);
-
-            } else if (state === 'checkout.order.failed' || state === 'checkout.transaction.attempt.failed') {
-                // Payment failed - mark as failed but don't create sub-orders
-                pendingOrder.paymentStatus = 'Failed';
-                pendingOrder.orderStatus = 'Failed';
-                await pendingOrder.save();
-
-                console.log(`Order failed for transaction: ${merchantTransactionId}`);
-            }
-
-            return res.status(200).json({ status: "Success" });
-
-        } catch (validationError) {
-            console.error("PhonePe callback validation error:", validationError);
-            return res.status(401).json({ message: "Invalid callback" });
-        }
-    } catch (error) {
-        console.error("PhonePe webhook error:", error);
-        return res.status(500).json({ message: "Error processing webhook", error: error.message });
+  // Start a session for atomic operations
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    // Validate authorization header
+    const authorizationHeader = req.headers.authorization;
+    if (!authorizationHeader) {
+      await session.abortTransaction();
+      return res.status(401).json({ 
+        message: "Authorization header missing",
+        success: false
+      });
     }
+
+    // Stringify the body for validation
+    const callbackBody = JSON.stringify(req.body);
+
+    // Log incoming webhook for debugging
+    console.log("PhonePe Webhook Received:", {
+      headers: req.headers,
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+
+    // Validate the callback
+    let callbackResponse;
+    try {
+      callbackResponse = phonePeClient.validateCallback(
+        PHONEPE_CALLBACK_USERNAME,
+        PHONEPE_CALLBACK_PASSWORD,
+        authorizationHeader,
+        callbackBody
+      );
+    } catch (validationError) {
+      await session.abortTransaction();
+      console.error("PhonePe Callback Validation Failed:", {
+        error: validationError.message,
+        stack: validationError.stack
+      });
+      return res.status(401).json({ 
+        message: "Invalid callback",
+        success: false
+      });
+    }
+
+    // Extract transaction details
+    const merchantTransactionId = callbackResponse.payload.orderId?.toString();
+    const state = callbackResponse.payload.state;
+    const transactionAmount = callbackResponse.payload.amount / 100; // Convert from paisa to rupees
+
+    console.log(`Processing Webhook:`, {
+      transactionId: merchantTransactionId,
+      state: state,
+      amount: transactionAmount
+    });
+
+    // Find the pending order
+    const pendingOrder = await MainOrder.findOne({
+      phonepeTransactionId: merchantTransactionId
+    }).session(session);
+
+    if (!pendingOrder) {
+      await session.abortTransaction();
+      console.error("Pending Order Not Found:", merchantTransactionId);
+      return res.status(404).json({ 
+        message: "Order not found",
+        success: false
+      });
+    }
+
+    // Handle different payment states
+    if (state === "checkout.order.completed") {
+      // Validate payment amount matches order amount
+      if (Math.abs(transactionAmount - pendingOrder.totalAmount) > 0.01) {
+        await session.abortTransaction();
+        console.error("Amount Mismatch:", {
+          paidAmount: transactionAmount,
+          orderAmount: pendingOrder.totalAmount
+        });
+        return res.status(400).json({ 
+          message: "Payment amount doesn't match order amount",
+          success: false
+        });
+      }
+
+      // Verify we have cart data
+      if (!pendingOrder.pendingCartData?.vendorOrders) {
+        await session.abortTransaction();
+        console.error("Missing Cart Data for Order:", pendingOrder._id);
+        return res.status(400).json({ 
+          message: "Missing cart data for order completion",
+          success: false
+        });
+      }
+
+      try {
+        // Create the actual orders
+        const { createdOrders } = await createOrdersInDatabase(
+          pendingOrder.user,
+          pendingOrder.subtotal,
+          pendingOrder.platformFee,
+          pendingOrder.totalAmount,
+          pendingOrder.paymentMethod,
+          pendingOrder.shippingAddress,
+          pendingOrder.pendingCartData.vendorOrders,
+          session
+        );
+
+        // Update main order status
+        pendingOrder.paymentStatus = "Paid";
+        pendingOrder.orderStatus = "Processing";
+        pendingOrder.subOrders = createdOrders;
+        pendingOrder.isPendingPayment = false;
+        pendingOrder.pendingCartData = undefined;
+        await pendingOrder.save({ session });
+
+        // Commit the transaction
+        await session.commitTransaction();
+        
+        console.log("Order Successfully Completed:", {
+          orderId: pendingOrder._id,
+          transactionId: merchantTransactionId
+        });
+
+        // These operations don't need to be in the transaction
+        try {
+          // Create Shiprocket shipments (async - don't await)
+          const shippingAddress = await Address.findById(pendingOrder.shippingAddress);
+          createShiprocketShipments(
+            createdOrders, 
+            pendingOrder, 
+            shippingAddress, 
+            pendingOrder.user
+          ).catch(e => console.error("Shiprocket Error:", e));
+
+          // Clear the cart (async - don't await)
+          Cart.findOneAndUpdate(
+            { user: pendingOrder.user },
+            { items: [], totalPrice: 0, coupon: null }
+          ).catch(e => console.error("Cart Clear Error:", e));
+
+        } catch (asyncError) {
+          console.error("Non-critical async operations failed:", asyncError);
+          // These errors don't affect the main transaction
+        }
+
+        return res.status(200).json({ 
+          status: "Success",
+          success: true,
+          orderId: pendingOrder._id
+        });
+
+      } catch (orderCreationError) {
+        await session.abortTransaction();
+        console.error("Order Creation Failed:", {
+          error: orderCreationError.message,
+          stack: orderCreationError.stack,
+          orderId: pendingOrder._id
+        });
+        return res.status(500).json({ 
+          message: "Order creation failed",
+          success: false
+        });
+      }
+
+    } else if (state === "checkout.order.failed" || state === "checkout.transaction.attempt.failed") {
+      // Update order status to failed
+      pendingOrder.paymentStatus = "Failed";
+      pendingOrder.orderStatus = "Failed";
+      await pendingOrder.save({ session });
+      await session.commitTransaction();
+
+      console.log("Order Marked as Failed:", {
+        orderId: pendingOrder._id,
+        transactionId: merchantTransactionId
+      });
+
+      return res.status(200).json({ 
+        status: "Success (order failed)",
+        success: true
+      });
+
+    } else {
+      // Unknown state - log but don't modify order
+      await session.abortTransaction();
+      console.warn("Unknown Webhook State:", state);
+      return res.status(200).json({ 
+        status: "Success (no action taken)",
+        success: true
+      });
+    }
+
+  } catch (error) {
+    // Handle any unexpected errors
+    try {
+      await session.abortTransaction();
+    } catch (abortError) {
+      console.error("Failed to abort transaction:", abortError);
+    }
+
+    console.error("Webhook Processing Error:", {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.status(500).json({ 
+      message: "Error processing webhook",
+      success: false,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    session.endSession();
+  }
 };
 
 // Updated Check payment status endpoint
 exports.checkPaymentStatus = async (req, res) => {
-    try {
-        const { orderId, transactionId } = req.params;
+  try {
+    const { orderId, transactionId } = req.params;
 
-        let mainOrder;
-        
-        // Find order by either orderId or transactionId
-        if (orderId) {
-            mainOrder = await MainOrder.findById(orderId);
-        } else if (transactionId) {
-            mainOrder = await MainOrder.findOne({ 
-                phonepeTransactionId: transactionId.toString() // Ensure string comparison
+    let mainOrder;
+
+    // Find order by either orderId or transactionId
+    if (orderId) {
+      mainOrder = await MainOrder.findById(orderId);
+    } else if (transactionId) {
+      mainOrder = await MainOrder.findOne({
+        phonepeTransactionId: transactionId.toString(), // Ensure string comparison
+      });
+    }
+
+    if (!mainOrder) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (mainOrder.phonepeTransactionId) {
+      try {
+        const statusResponse = await phonePeClient.getOrderStatus(
+          mainOrder.phonepeTransactionId
+        );
+        const phonepeStatus = statusResponse.state;
+
+        console.log(
+          `Checking status for ${mainOrder.phonepeTransactionId}: ${phonepeStatus}`
+        );
+
+        // Update the order in DB if payment completed and orders not yet created
+    // In checkPaymentStatus, add a fallback for when webhook fails
+if (phonepeStatus === "COMPLETED" && mainOrder.isPendingPayment) {
+    try {
+        // Try to complete the order if webhook missed it
+        if (!mainOrder.pendingCartData) {
+            console.error("Missing cart data for pending order:", mainOrder._id);
+            return res.status(200).json({
+                orderId: mainOrder._id,
+                paymentStatus: "Paid but order incomplete",
+                orderStatus: "Error - contact support",
+                phonepeStatus
             });
         }
 
-        if (!mainOrder) {
-            return res.status(404).json({ message: "Order not found" });
-        }
+        // Create the actual orders
+        const { createdOrders } = await createOrdersInDatabase(
+            mainOrder.user,
+            mainOrder.subtotal,
+            mainOrder.platformFee,
+            mainOrder.totalAmount,
+            mainOrder.paymentMethod,
+            mainOrder.shippingAddress,
+            mainOrder.pendingCartData.vendorOrders
+        );
 
-        if (mainOrder.phonepeTransactionId) {
-            try {
-                const statusResponse = await phonePeClient.getOrderStatus(mainOrder.phonepeTransactionId);
-                const phonepeStatus = statusResponse.state;
+        // Update main order
+        mainOrder.paymentStatus = "Paid";
+        mainOrder.orderStatus = "Processing";
+        mainOrder.subOrders = createdOrders;
+        mainOrder.isPendingPayment = false;
+        mainOrder.pendingCartData = undefined;
+        await mainOrder.save();
 
-                console.log(`Checking status for ${mainOrder.phonepeTransactionId}: ${phonepeStatus}`);
+        // Create Shiprocket shipments
+        const shippingAddress = await Address.findById(mainOrder.shippingAddress);
+        await createShiprocketShipments(createdOrders, mainOrder, shippingAddress, mainOrder.user);
 
-                // Update the order in DB if payment completed and orders not yet created
-                if (phonepeStatus === "COMPLETED" && mainOrder.isPendingPayment) {
-                    // Create the actual orders
-                    const { createdOrders } = await createOrdersInDatabase(
-                        mainOrder.user,
-                        mainOrder.subtotal,
-                        mainOrder.platformFee,
-                        mainOrder.totalAmount,
-                        mainOrder.paymentMethod,
-                        mainOrder.shippingAddress,
-                        mainOrder.pendingCartData.vendorOrders
-                    );
+        // Clear the cart
+        await Cart.findOneAndUpdate(
+            { user: mainOrder.user },
+            { items: [], totalPrice: 0, coupon: null }
+        );
 
-                    // Update main order
-                    mainOrder.paymentStatus = "Paid"; // Changed from "Completed" to "Paid"
-                    mainOrder.orderStatus = "Processing";
-                    mainOrder.subOrders = createdOrders;
-                    mainOrder.isPendingPayment = false;
-                    mainOrder.pendingCartData = undefined;
-                    await mainOrder.save();
-
-                    // Create Shiprocket shipments
-                    const shippingAddress = await Address.findById(mainOrder.shippingAddress);
-                    await createShiprocketShipments(createdOrders, mainOrder, shippingAddress, mainOrder.user);
-
-                    // Clear the cart
-                    await Cart.findOneAndUpdate(
-                        { user: mainOrder.user },
-                        { items: [], totalPrice: 0, coupon: null }
-                    );
-                }
-
-                if (
-                    (phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
-                    mainOrder.paymentStatus !== "Failed"
-                ) {
-                    mainOrder.paymentStatus = "Failed";
-                    mainOrder.orderStatus = "Failed";
-                    await mainOrder.save();
-                }
-
-                return res.status(200).json({
-                    orderId: mainOrder._id,
-                    paymentStatus: phonepeStatus === "COMPLETED" ? "Paid" : mainOrder.paymentStatus,
-                    orderStatus: phonepeStatus === "COMPLETED" ? "Processing" : mainOrder.orderStatus,
-                    phonepeStatus,
-                    hasSubOrders: mainOrder.subOrders && mainOrder.subOrders.length > 0
-                });
-            } catch (phonepeError) {
-                console.error("Error getting PhonePe status:", phonepeError);
-                return res.status(200).json({
-                    orderId: mainOrder._id,
-                    paymentStatus: mainOrder.paymentStatus,
-                    orderStatus: mainOrder.orderStatus,
-                    phonepeStatus: "Error fetching status"
-                });
-            }
-        }
-
-        // For non-PhonePe orders, return current status
         return res.status(200).json({
             orderId: mainOrder._id,
-            paymentStatus: mainOrder.paymentStatus,
-            orderStatus: mainOrder.orderStatus
+            paymentStatus: "Paid",
+            orderStatus: "Processing",
+            phonepeStatus,
+            hasSubOrders: true
         });
-        
-    } catch (error) {
-        console.error("Error checking payment status:", error);
-        res.status(500).json({ message: "Error checking payment status", error: error.message });
+    } catch (completionError) {
+        console.error("Error completing order in checkStatus:", completionError);
+        return res.status(200).json({
+            orderId: mainOrder._id,
+            paymentStatus: "Paid but order incomplete",
+            orderStatus: "Error - contact support",
+            phonepeStatus
+        });
     }
+}
+
+        if (
+          (phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
+          mainOrder.paymentStatus !== "Failed"
+        ) {
+          mainOrder.paymentStatus = "Failed";
+          mainOrder.orderStatus = "Failed";
+          await mainOrder.save();
+        }
+
+        return res.status(200).json({
+          orderId: mainOrder._id,
+          paymentStatus:
+            phonepeStatus === "COMPLETED" ? "Paid" : mainOrder.paymentStatus,
+          orderStatus:
+            phonepeStatus === "COMPLETED"
+              ? "Processing"
+              : mainOrder.orderStatus,
+          phonepeStatus,
+          hasSubOrders: mainOrder.subOrders && mainOrder.subOrders.length > 0,
+        });
+      } catch (phonepeError) {
+        console.error("Error getting PhonePe status:", phonepeError);
+        return res.status(200).json({
+          orderId: mainOrder._id,
+          paymentStatus: mainOrder.paymentStatus,
+          orderStatus: mainOrder.orderStatus,
+          phonepeStatus: "Error fetching status",
+        });
+      }
+    }
+
+    // For non-PhonePe orders, return current status
+    return res.status(200).json({
+      orderId: mainOrder._id,
+      paymentStatus: mainOrder.paymentStatus,
+      orderStatus: mainOrder.orderStatus,
+    });
+  } catch (error) {
+    console.error("Error checking payment status:", error);
+    res
+      .status(500)
+      .json({ message: "Error checking payment status", error: error.message });
+  }
 };
 
 exports.getUserOrders = async (req, res) => {
-    try {
-        const { userId } = req.params;
+  try {
+    const { userId } = req.params;
 
-        // Fetch platform fee (assuming there's only one active fee)
-        const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 }); // Get latest fee
-        const platformFee = platformFeeData?.amount || 0; // Default to 0 if not found
+    // Fetch platform fee (assuming there's only one active fee)
+    const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 }); // Get latest fee
+    const platformFee = platformFeeData?.amount || 0; // Default to 0 if not found
 
-        // Fetch user orders
-        const orders = await Order.find({ user: userId })
-            .populate("items.product")
-            .populate("shippingAddress")
-            .sort({ createdAt: -1 });
+    // Fetch user orders
+    const orders = await Order.find({ user: userId })
+      .populate("items.product")
+      .populate("shippingAddress")
+      .sort({ createdAt: -1 });
 
-        // Calculate final price for each order
-        const ordersWithPlatformFee = orders.map(order => {
-            const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
-            return {
-                ...order.toObject(), // Convert Mongoose document to plain object
-                platformFee,
-                finalTotalPrice: finalTotal
-            };
-        });
+    // Calculate final price for each order
+    const ordersWithPlatformFee = orders.map((order) => {
+      const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
+      return {
+        ...order.toObject(), // Convert Mongoose document to plain object
+        platformFee,
+        finalTotalPrice: finalTotal,
+      };
+    });
 
-        res.status(200).json({ orders: ordersWithPlatformFee });
-    } catch (error) {
-        res.status(500).json({ message: "Error fetching orders", error: error.message });
-    }
+    res.status(200).json({ orders: ordersWithPlatformFee });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching orders", error: error.message });
+  }
 };
 
 // Get a single order by ID (GET method)
 exports.getOrderById = async (req, res) => {
-    try {
-        const { orderId } = req.params;
+  try {
+    const { orderId } = req.params;
 
-        const order = await Order.findById(orderId)
-            .populate("items.product")
-            .populate("shippingAddress")
-            .populate("user");
+    const order = await Order.findById(orderId)
+      .populate("items.product")
+      .populate("shippingAddress")
+      .populate("user");
 
-        if (!order) {
-            return res.status(404).json({ message: "Order not found" });
-        }
-
-        res.status(200).json({ order });
-    } catch (error) {
-        res.status(500).json({ message: "Error fetching order", error: error.message });
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
     }
+
+    res.status(200).json({ order });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching order", error: error.message });
+  }
 };
 
 // Update order status (PATCH method)
 exports.updateOrderStatus = async (req, res) => {
-    try {
-        const { orderId } = req.params;
-        const { orderStatus, paymentStatus } = req.body;
+  try {
+    const { orderId } = req.params;
+    const { orderStatus, paymentStatus } = req.body;
 
-        const updatedOrder = await Order.findByIdAndUpdate(
-            orderId,
-            { orderStatus, paymentStatus },
-            { new: true }
-        );
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      { orderStatus, paymentStatus },
+      { new: true }
+    );
 
-        if (!updatedOrder) {
-            return res.status(404).json({ message: "Order not found" });
-        }
-
-        res.status(200).json({ message: "Order updated successfully", order: updatedOrder });
-    } catch (error) {
-        res.status(500).json({ message: "Error updating order", error: error.message });
+    if (!updatedOrder) {
+      return res.status(404).json({ message: "Order not found" });
     }
+
+    res
+      .status(200)
+      .json({ message: "Order updated successfully", order: updatedOrder });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error updating order", error: error.message });
+  }
 };
 
 exports.getOrdersByMainOrderId = async (req, res) => {
   try {
     const { mainOrderId } = req.params;
-    
+
     // Fetch platform fee information
     const platformFee = await PlatformFee.findOne();
 
@@ -713,9 +933,9 @@ exports.getOrdersByMainOrderId = async (req, res) => {
     }
 
     // Include platform fee information in the response
-    res.status(200).json({ 
+    res.status(200).json({
       orders,
-      platformFee: platformFee || { feeType: "percentage", amount: 0 } // Default values if fee not set
+      platformFee: platformFee || { feeType: "percentage", amount: 0 }, // Default values if fee not set
     });
   } catch (error) {
     res
@@ -724,14 +944,13 @@ exports.getOrdersByMainOrderId = async (req, res) => {
   }
 };
 
-
 exports.generateInvoiceForMainOrder = async (req, res) => {
   try {
     const { mainOrderId } = req.params;
 
     // Fetch platform fee information
     const platformFee = await PlatformFee.findOne();
-    
+
     const orders = await Order.find({ mainOrderId })
       .populate({
         path: "items.product",
@@ -751,7 +970,7 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
       // Convert states to lowercase for comparison
       buyerState = (buyerState || "").toLowerCase().trim();
       sellerState = (sellerState || "").toLowerCase().trim();
-    
+
       // If both in Kerala (or same state), use CGST+SGST (intra-state)
       if (!buyerState || !sellerState || buyerState === sellerState) {
         return "intra-state";
@@ -767,9 +986,7 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
         return "2520220000000033091"; // IGST18 (new inter-state)
       }
     };
-    
-    
-    
+
     let customerId = user.zohoCustomerId;
     if (!customerId) {
       const existingCustomer = await searchCustomerInZoho(user.email);
@@ -853,7 +1070,7 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
           order.shippingAddress.state,
           item.product.owner.state
         );
-        
+
         lineItems.push({
           item_id: item.product.zohoItemId,
           name: item.product.name,
@@ -861,7 +1078,7 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
           quantity: item.quantity,
           rate: item.product.finalPrice || item.product.price,
           tax_id: getTaxId(taxType), // Use the new function
-          sku: item.product.sku || `SKU-${item.product._id}`
+          sku: item.product.sku || `SKU-${item.product._id}`,
         });
       }
     }
@@ -873,22 +1090,26 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
         name: "RigsDock Platform Fee",
         description: "Service charge for using RigsDock platform",
         quantity: 1,
-        rate: platformFee.feeType === "fixed" ? platformFee.amount : 
-          (orders.reduce((sum, order) => sum + order.totalAmount, 0) * platformFee.amount / 100),
-        tax_id: getTaxId("intra-state") // Assuming platform fee is always intra-state
+        rate:
+          platformFee.feeType === "fixed"
+            ? platformFee.amount
+            : (orders.reduce((sum, order) => sum + order.totalAmount, 0) *
+                platformFee.amount) /
+              100,
+        tax_id: getTaxId("intra-state"), // Assuming platform fee is always intra-state
       });
     }
 
     const debugTaxInfo = (orders) => {
       console.log("===== TAX DEBUGGING INFO =====");
-      
+
       for (const order of orders) {
         for (const item of order.items) {
           const buyerState = order.shippingAddress.state || "";
           const sellerState = item.product.owner.state || "";
-          
+
           const taxType = determineTaxType(buyerState, sellerState);
-          
+
           console.log(`Order ID: ${order._id}`);
           console.log(`Product: ${item.product.name}`);
           console.log(`Buyer State: "${buyerState}"`);
@@ -897,7 +1118,7 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
           console.log("----------------------------");
         }
       }
-      
+
       // Log all available tax IDs for reference
       console.log("\n===== AVAILABLE TAX IDS =====");
       // You can fetch this from your Zoho API or hardcode the values from paste-2.txt
@@ -911,17 +1132,16 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
         { id: "2520220000000033089", name: "IGST12", percentage: 12 },
         { id: "2520220000000033091", name: "IGST18", percentage: 18 },
         { id: "2520220000000033093", name: "IGST28", percentage: 28 },
-        { id: "2520220000000033087", name: "IGST5", percentage: 5 }
+        { id: "2520220000000033087", name: "IGST5", percentage: 5 },
       ];
-      
-      
-      taxes.forEach(tax => {
+
+      taxes.forEach((tax) => {
         console.log(`${tax.name} (${tax.percentage}%): ${tax.id}`);
       });
-      
+
       console.log("=============================");
     };
-    
+
     // Then call this function before your invoice creation
     debugTaxInfo(orders);
     // Zoho invoice creation with tax IDs
@@ -952,16 +1172,20 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
     });
 
     const invoiceDir = path.join(process.cwd(), "uploads"); // directly into /uploads
-if (!fs.existsSync(invoiceDir)) {
-  fs.mkdirSync(invoiceDir, { recursive: true });
-}
+    if (!fs.existsSync(invoiceDir)) {
+      fs.mkdirSync(invoiceDir, { recursive: true });
+    }
 
-const invoiceFileName = `invoice-${mainOrderId}-${Date.now()}.pdf`;
-const invoicePath = path.join(invoiceDir, invoiceFileName);
-const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileName}`;
-    const upiId = "yourupiid@bank";       
-    const payeeName = "Your Name";         // Your name or company name
-    const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&cu=INR`;
+    const invoiceFileName = `invoice-${mainOrderId}-${Date.now()}.pdf`;
+    const invoicePath = path.join(invoiceDir, invoiceFileName);
+    const invoiceUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/uploads/${invoiceFileName}`;
+    const upiId = "yourupiid@bank";
+    const payeeName = "Your Name"; // Your name or company name
+    const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(
+      payeeName
+    )}&cu=INR`;
     // Generate QR Code
     const qrCodeDataUrl = await qrcode.toDataURL(upiUrl);
     const writeStream = fs.createWriteStream(invoicePath);
@@ -1287,7 +1511,7 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
     // Add Platform Fee Invoice as a separate page - FLIPKART STYLE
     if (platformFee) {
       doc.addPage();
-      
+
       // Add logo again on the platform fee page
       try {
         const logoResponse = await axios.get(logoUrl, {
@@ -1322,11 +1546,11 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
 
       // RigsDock information as service provider
       doc
-      .font("Helvetica-Bold")
-      .text("RigsDock Pvt. Ltd.", 50, 140)
-      .font("Helvetica")
-      .text("GSTIN: 32EJQPK8494B1ZV", 50, 155) // Keep GSTIN as it's important for tax
-      .text("State: Kerala", 50, 170); // Keep state as it's needed for tax calculation
+        .font("Helvetica-Bold")
+        .text("RigsDock Pvt. Ltd.", 50, 140)
+        .font("Helvetica")
+        .text("GSTIN: 32EJQPK8494B1ZV", 50, 155) // Keep GSTIN as it's important for tax
+        .text("State: Kerala", 50, 170); // Keep state as it's needed for tax calculation
 
       doc
         .text(
@@ -1360,16 +1584,12 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
         .text(`${shippingAddress.addressLine1 || ""}`, 50, 240)
         .text(`${shippingAddress.addressLine2 || ""}`, 50, 255)
         .text(
-          `${shippingAddress.city || ""}, ${
-            shippingAddress.state || ""
-          }`,
+          `${shippingAddress.city || ""}, ${shippingAddress.state || ""}`,
           50,
           270
         )
         .text(
-          `${shippingAddress.country || ""} - ${
-            shippingAddress.zipCode || ""
-          }`,
+          `${shippingAddress.country || ""} - ${shippingAddress.zipCode || ""}`,
           50,
           285
         )
@@ -1430,15 +1650,20 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
 
       // Calculate platform fee amount
       const totalOrderAmount = orders.reduce((sum, order) => {
-        return sum + order.items.reduce(
-          (itemSum, item) => itemSum + (item.product.finalPrice * item.quantity),
-          0
+        return (
+          sum +
+          order.items.reduce(
+            (itemSum, item) =>
+              itemSum + item.product.finalPrice * item.quantity,
+            0
+          )
         );
       }, 0);
-      
-      const platformFeeAmount = platformFee.feeType === "fixed" 
-        ? platformFee.amount 
-        : (totalOrderAmount * platformFee.amount / 100);
+
+      const platformFeeAmount =
+        platformFee.feeType === "fixed"
+          ? platformFee.amount
+          : (totalOrderAmount * platformFee.amount) / 100;
 
       // Add platform fee line item
       let yPos = tableTop + 25;
@@ -1451,9 +1676,10 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
         .fill();
       doc.fillColor(colors.text);
 
-      const platformFeeDescription = platformFee.feeType === "fixed"
-        ? "RigsDock Platform Service Fee (Fixed)"
-        : `RigsDock Platform Service Fee (${platformFee.amount}% of order value)`;
+      const platformFeeDescription =
+        platformFee.feeType === "fixed"
+          ? "RigsDock Platform Service Fee (Fixed)"
+          : `RigsDock Platform Service Fee (${platformFee.amount}% of order value)`;
 
       const rowData = [
         1,
@@ -1501,9 +1727,7 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
       const priceX = 450;
 
       // Add box around totals section
-      doc
-        .rect(350, yPos + 5, 200, 80)
-        .fillAndStroke("#F9F9F9", colors.border);
+      doc.rect(350, yPos + 5, 200, 80).fillAndStroke("#F9F9F9", colors.border);
 
       // Left-align labels and right-align amounts
       doc.font("Helvetica").fontSize(9).fillColor(colors.text);
@@ -1555,160 +1779,163 @@ const invoiceUrl = `${req.protocol}://${req.get("host")}/uploads/${invoiceFileNa
         );
     }
 
-  
-   const pageWidth = doc.page.width;
-   const pageHeight = doc.page.height;
-   const footerHeight = 50;
-   const signatureHeight = 80;
-   const signatureY = pageHeight - footerHeight - signatureHeight;
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const footerHeight = 50;
+    const signatureHeight = 80;
+    const signatureY = pageHeight - footerHeight - signatureHeight;
 
-   doc.y = signatureY;
+    doc.y = signatureY;
 
-   // Add authentication section on last page only
-   doc
-     .font("Helvetica-Bold")
-     .fontSize(9)
-     .text("For RigsDock Pvt. Ltd.", pageWidth - 180, signatureY, {
-       width: 140,
-       align: "left",
-     });
+    // Add authentication section on last page only
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(9)
+      .text("For RigsDock Pvt. Ltd.", pageWidth - 180, signatureY, {
+        width: 140,
+        align: "left",
+      });
 
-   doc.moveDown(1);
+    doc.moveDown(1);
 
-   try {
-     const signatureResponse = await axios.get(signatureUrl, {
-       responseType: "arraybuffer",
-     });
-     const signatureBuffer = Buffer.from(signatureResponse.data, "binary");
+    try {
+      const signatureResponse = await axios.get(signatureUrl, {
+        responseType: "arraybuffer",
+      });
+      const signatureBuffer = Buffer.from(signatureResponse.data, "binary");
 
-     // Move signature image slightly more left than text
-     doc.image(signatureBuffer, pageWidth - 170, signatureY + 15, {
-       width: 80,
-       height: 40,
-     });
-   } catch (signatureError) {
-     console.error("Error loading signature:", signatureError);
-   }
+      // Move signature image slightly more left than text
+      doc.image(signatureBuffer, pageWidth - 170, signatureY + 15, {
+        width: 80,
+        height: 40,
+      });
+    } catch (signatureError) {
+      console.error("Error loading signature:", signatureError);
+    }
 
-   // Add "Authorized Signatory" slightly more left than signature
-   doc
-     .font("Helvetica")
-     .text("Authorized Signatory", pageWidth - 160, signatureY + 60, {
-       width: 120,
-       align: "left",
-     });
+    // Add "Authorized Signatory" slightly more left than signature
+    doc
+      .font("Helvetica")
+      .text("Authorized Signatory", pageWidth - 160, signatureY + 60, {
+        width: 120,
+        align: "left",
+      });
 
-   // Add footer
-   addFooter();
+    // Add footer
+    addFooter();
 
-   // End the PDF document
-   doc.end();
+    // End the PDF document
+    doc.end();
 
-   // Wait for the PDF to be written to disk
-   await new Promise((resolve, reject) => {
-     writeStream.on("finish", resolve);
-     writeStream.on("error", reject);
-   });
+    // Wait for the PDF to be written to disk
+    await new Promise((resolve, reject) => {
+      writeStream.on("finish", resolve);
+      writeStream.on("error", reject);
+    });
 
-   // Calculate grand total for all orders with proper tax breakdown
-   const grandTotal = orders.reduce((total, order) => {
-     const orderSubtotal = order.items.reduce(
-       (sum, item) => sum + item.product.finalPrice * item.quantity,
-       0
-     );
-     return total + orderSubtotal * 1.18; // Including GST
-   }, 0);
+    // Calculate grand total for all orders with proper tax breakdown
+    const grandTotal = orders.reduce((total, order) => {
+      const orderSubtotal = order.items.reduce(
+        (sum, item) => sum + item.product.finalPrice * item.quantity,
+        0
+      );
+      return total + orderSubtotal * 1.18; // Including GST
+    }, 0);
 
-   // Calculate platform fee for grand total
-   let platformFeeAmount = 0;
-   let platformFeeTax = 0;
-   if (platformFee) {
-     platformFeeAmount = platformFee.feeType === "fixed" 
-       ? platformFee.amount 
-       : (grandTotal * platformFee.amount / 100);
-     platformFeeTax = platformFeeAmount * 0.18; // 18% GST on platform fee
-   }
+    // Calculate platform fee for grand total
+    let platformFeeAmount = 0;
+    let platformFeeTax = 0;
+    if (platformFee) {
+      platformFeeAmount =
+        platformFee.feeType === "fixed"
+          ? platformFee.amount
+          : (grandTotal * platformFee.amount) / 100;
+      platformFeeTax = platformFeeAmount * 0.18; // 18% GST on platform fee
+    }
 
-   // Add platform fee to grand total
-   const finalGrandTotal = grandTotal + platformFeeAmount + platformFeeTax;
+    // Add platform fee to grand total
+    const finalGrandTotal = grandTotal + platformFeeAmount + platformFeeTax;
 
-   // Format order details for response with tax breakdown
-   const orderDetails = orders.map((order) => {
-     const subtotal = order.items.reduce(
-       (sum, item) => sum + item.product.finalPrice * item.quantity,
-       0
-     );
-     const taxType = determineTaxType(
-       order.shippingAddress.state,
-       order.items[0].product.owner.state
-     );
-     const gstAmount = subtotal * 0.18;
+    // Format order details for response with tax breakdown
+    const orderDetails = orders.map((order) => {
+      const subtotal = order.items.reduce(
+        (sum, item) => sum + item.product.finalPrice * item.quantity,
+        0
+      );
+      const taxType = determineTaxType(
+        order.shippingAddress.state,
+        order.items[0].product.owner.state
+      );
+      const gstAmount = subtotal * 0.18;
 
-     let taxBreakdown;
-     if (taxType === "intra-state") {
-       taxBreakdown = {
-         cgst: gstAmount / 2,
-         sgst: gstAmount / 2,
-         igst: 0,
-       };
-     } else {
-       taxBreakdown = {
-         cgst: 0,
-         sgst: 0,
-         igst: gstAmount,
-       };
-     }
+      let taxBreakdown;
+      if (taxType === "intra-state") {
+        taxBreakdown = {
+          cgst: gstAmount / 2,
+          sgst: gstAmount / 2,
+          igst: 0,
+        };
+      } else {
+        taxBreakdown = {
+          cgst: 0,
+          sgst: 0,
+          igst: gstAmount,
+        };
+      }
 
-     return {
-       orderId: order._id,
-       vendorName: order.items[0].product.owner.businessname,
-       subtotal: subtotal,
-       taxType: taxType,
-       taxBreakdown: taxBreakdown,
-       totalAmount: subtotal + gstAmount,
-       customer: order.shippingAddress,
-       items: order.items.map((item) => ({
-         productName: item.product.name,
-         quantity: item.quantity,
-         price: item.product.finalPrice,
-         total: item.product.finalPrice * item.quantity,
-       })),
-     };
-   });
+      return {
+        orderId: order._id,
+        vendorName: order.items[0].product.owner.businessname,
+        subtotal: subtotal,
+        taxType: taxType,
+        taxBreakdown: taxBreakdown,
+        totalAmount: subtotal + gstAmount,
+        customer: order.shippingAddress,
+        items: order.items.map((item) => ({
+          productName: item.product.name,
+          quantity: item.quantity,
+          price: item.product.finalPrice,
+          total: item.product.finalPrice * item.quantity,
+        })),
+      };
+    });
 
-   // Include platform fee details in response
-   let platformFeeDetails = null;
-   if (platformFee) {
-     platformFeeDetails = {
-       feeType: platformFee.feeType,
-       amount: platformFee.feeType === "fixed" ? platformFee.amount : `${platformFee.amount}%`,
-       calculatedAmount: platformFeeAmount,
-       taxBreakdown: {
-         cgst: platformFeeTax / 2,
-         sgst: platformFeeTax / 2,
-         igst: 0,
-       },
-       totalWithTax: platformFeeAmount + platformFeeTax
-     };
-   }
+    // Include platform fee details in response
+    let platformFeeDetails = null;
+    if (platformFee) {
+      platformFeeDetails = {
+        feeType: platformFee.feeType,
+        amount:
+          platformFee.feeType === "fixed"
+            ? platformFee.amount
+            : `${platformFee.amount}%`,
+        calculatedAmount: platformFeeAmount,
+        taxBreakdown: {
+          cgst: platformFeeTax / 2,
+          sgst: platformFeeTax / 2,
+          igst: 0,
+        },
+        totalWithTax: platformFeeAmount + platformFeeTax,
+      };
+    }
 
-   // Send response
-   res.status(201).json({
-     message: "Invoice created successfully",
-     zohoInvoice: invoiceResponse,
-     pdfUrl: invoiceUrl,
-     qrCode: qrCodeDataUrl,
-     mainOrderId,
-     grandTotal: finalGrandTotal,
-     orderDetails,
-     platformFee: platformFeeDetails
-   });
- } catch (error) {
-   console.error("❌ Invoice Generation Error:", error);
-   res.status(500).json({
-     error: "Invoice generation failed",
-     message: error.message,
-     stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-   });
- }
+    // Send response
+    res.status(201).json({
+      message: "Invoice created successfully",
+      zohoInvoice: invoiceResponse,
+      pdfUrl: invoiceUrl,
+      qrCode: qrCodeDataUrl,
+      mainOrderId,
+      grandTotal: finalGrandTotal,
+      orderDetails,
+      platformFee: platformFeeDetails,
+    });
+  } catch (error) {
+    console.error("❌ Invoice Generation Error:", error);
+    res.status(500).json({
+      error: "Invoice generation failed",
+      message: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
+  }
 };
