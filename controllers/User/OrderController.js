@@ -417,17 +417,13 @@ exports.phonepeWebhook = async (req, res) => {
     }
 
     // FIXED: Find the pending order with better query
-    const pendingOrder = await MainOrder.findOne({
-      $and: [
-        {
-          $or: [
-            { phonepeTransactionId: merchantTransactionId },
-            { merchantOrderId: merchantTransactionId },
-          ]
-        },
-        { isPendingPayment: true }
-      ]
-    }).session(session);
+   const pendingOrder = await MainOrder.findOne({
+  $or: [
+    { phonepeTransactionId: payload.merchantOrderId }, // This matches what you store
+    { merchantOrderId: payload.merchantOrderId }      // Secondary match
+  ],
+  isPendingPayment: true
+}).session(session);
 
     if (!pendingOrder) {
       console.error("Pending Order Not Found for transaction:", merchantTransactionId);
