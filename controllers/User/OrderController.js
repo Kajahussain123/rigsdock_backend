@@ -311,7 +311,7 @@ exports.placeOrder = async (req, res) => {
               paymentStatus: "Pending", // Keep as pending until payment confirmed
               orderStatus: "Pending", // Keep as pending until payment confirmed
               shippingAddress: shippingAddressId,
-              phonepeTransactionId: merchantTransactionId,
+              phonepeTransactionId: merchantTransactionId.toString(), // Ensure it's a string
               subOrders: [], // Empty initially
               isPendingPayment: true, // Add this flag to identify pending payment orders
           });
@@ -319,8 +319,6 @@ exports.placeOrder = async (req, res) => {
           await pendingOrder.save();
 
           // Store cart data temporarily for order creation after payment
-          // You can store this in Redis or create a separate PendingOrder collection
-          // For now, let's add cart data to the pending order
           pendingOrder.pendingCartData = {
               vendorOrders,
               shippingAddress: shippingAddressId
@@ -382,7 +380,7 @@ async function createOrdersInDatabase(userId, subtotal, platformFeeAmount, total
         platformFee: platformFeeAmount,
         totalAmount,
         paymentMethod,
-        paymentStatus: paymentMethod === "COD" ? "Pending" : "Completed",
+        paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid", // Changed from "Completed" to "Paid"
         orderStatus: "Processing",
         shippingAddress: shippingAddressId,
         subOrders: [],
@@ -402,7 +400,7 @@ async function createOrdersInDatabase(userId, subtotal, platformFeeAmount, total
             items: orderData.items,
             totalPrice: orderData.totalPrice,
             paymentMethod,
-            paymentStatus: paymentMethod === "COD" ? "Pending" : "Completed",
+            paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid", // Changed from "Completed" to "Paid"
             orderStatus: "Processing",
             shippingAddress: shippingAddressId,
         });
@@ -456,8 +454,12 @@ exports.phonepeWebhook = async (req, res) => {
             const merchantTransactionId = callbackResponse.payload.orderId;
             const state = callbackResponse.payload.state;
 
-            // Find the pending order by transaction ID
-            const pendingOrder = await MainOrder.findOne({ phonepeTransactionId: merchantTransactionId });
+            console.log(`Webhook received - Transaction: ${merchantTransactionId}, State: ${state}`);
+
+            // Find the pending order by transaction ID (ensure we're querying string field)
+            const pendingOrder = await MainOrder.findOne({ 
+                phonepeTransactionId: merchantTransactionId.toString() // Ensure string comparison
+            });
 
             if (!pendingOrder) {
                 console.error("Pending order not found for transaction:", merchantTransactionId);
@@ -477,7 +479,7 @@ exports.phonepeWebhook = async (req, res) => {
                 );
 
                 // Update the main order
-                pendingOrder.paymentStatus = 'Completed';
+                pendingOrder.paymentStatus = 'Paid'; // Changed from 'Completed' to 'Paid'
                 pendingOrder.orderStatus = 'Processing';
                 pendingOrder.subOrders = createdOrders;
                 pendingOrder.isPendingPayment = false;
@@ -495,11 +497,15 @@ exports.phonepeWebhook = async (req, res) => {
                     { items: [], totalPrice: 0, coupon: null }
                 );
 
+                console.log(`Order completed successfully for transaction: ${merchantTransactionId}`);
+
             } else if (state === 'checkout.order.failed' || state === 'checkout.transaction.attempt.failed') {
                 // Payment failed - mark as failed but don't create sub-orders
                 pendingOrder.paymentStatus = 'Failed';
                 pendingOrder.orderStatus = 'Failed';
                 await pendingOrder.save();
+
+                console.log(`Order failed for transaction: ${merchantTransactionId}`);
             }
 
             return res.status(200).json({ status: "Success" });
@@ -525,7 +531,9 @@ exports.checkPaymentStatus = async (req, res) => {
         if (orderId) {
             mainOrder = await MainOrder.findById(orderId);
         } else if (transactionId) {
-            mainOrder = await MainOrder.findOne({ phonepeTransactionId: transactionId });
+            mainOrder = await MainOrder.findOne({ 
+                phonepeTransactionId: transactionId.toString() // Ensure string comparison
+            });
         }
 
         if (!mainOrder) {
@@ -536,6 +544,8 @@ exports.checkPaymentStatus = async (req, res) => {
             try {
                 const statusResponse = await phonePeClient.getOrderStatus(mainOrder.phonepeTransactionId);
                 const phonepeStatus = statusResponse.state;
+
+                console.log(`Checking status for ${mainOrder.phonepeTransactionId}: ${phonepeStatus}`);
 
                 // Update the order in DB if payment completed and orders not yet created
                 if (phonepeStatus === "COMPLETED" && mainOrder.isPendingPayment) {
@@ -551,7 +561,7 @@ exports.checkPaymentStatus = async (req, res) => {
                     );
 
                     // Update main order
-                    mainOrder.paymentStatus = "Completed";
+                    mainOrder.paymentStatus = "Paid"; // Changed from "Completed" to "Paid"
                     mainOrder.orderStatus = "Processing";
                     mainOrder.subOrders = createdOrders;
                     mainOrder.isPendingPayment = false;
@@ -580,7 +590,7 @@ exports.checkPaymentStatus = async (req, res) => {
 
                 return res.status(200).json({
                     orderId: mainOrder._id,
-                    paymentStatus: phonepeStatus === "COMPLETED" ? "Completed" : mainOrder.paymentStatus,
+                    paymentStatus: phonepeStatus === "COMPLETED" ? "Paid" : mainOrder.paymentStatus,
                     orderStatus: phonepeStatus === "COMPLETED" ? "Processing" : mainOrder.orderStatus,
                     phonepeStatus,
                     hasSubOrders: mainOrder.subOrders && mainOrder.subOrders.length > 0
