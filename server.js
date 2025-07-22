@@ -97,6 +97,7 @@ const vendorReview = require('./routes/Vendor/Review/reviewRoutes');
 const vendorInsights = require('./routes/Vendor/Insights/insightsRoute');
 const vendorChat = require('./routes/Vendor/Chat/vendorChatRoute');
 const vendorShiprocket = require('./routes/Vendor/Shiprocket/vendorShiprocketRoute');
+const vendorBrandRoutes=require('./routes/Vendor/Brand/brandRoutes')
 
 
 
@@ -180,6 +181,7 @@ app.use("/api/vendor/review", vendorReview);
 app.use("/api/vendor/insights", vendorInsights);
 app.use("/api/vendor/chat", vendorChat);
 app.use("/api/vendor/shiprocket", vendorShiprocket);
+app.use('/api/vendor/brand',vendorBrandRoutes)
 
 
 // User Routes
