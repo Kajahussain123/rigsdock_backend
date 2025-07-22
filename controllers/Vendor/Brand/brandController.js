@@ -1,4 +1,4 @@
-const Brand = require("../../../controllers/Admin/Brand");
+const Brand = require("../../../models/admin/BrandModel");
 const fs = require("fs");
 const path = require("path");
 
