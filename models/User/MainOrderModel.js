@@ -7,33 +7,41 @@ const mainOrderSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    subtotal: {
+      type: Number,
+      required: true,
+    },
+    platformFee: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
     totalAmount: {
       type: Number,
       required: true,
     },
     paymentMethod: {
       type: String,
-      enum: ["COD", "Credit Card", "Debit Card", "PhonePe", "Net Banking"],
+      enum: ["COD", "Credit Card", "Debit Card", "PhonePe", "Net Banking", "UPI"],
       required: true,
     },
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Paid", "Failed", "Processing"], // Add "Processing" to the allowed values
+      enum: ["Pending", "Paid", "Failed", "Processing"], // Fixed enum values
       default: "Pending",
-  },
-  
+    },
     orderStatus: {
       type: String,
-      enum: ["Processing","Pending", "Shipped", "Delivered", "Cancelled"],
+      enum: ["Processing", "Pending", "Shipped", "Delivered", "Cancelled", "Failed"], // Added "Failed"
       default: "Processing",
     },
-
-    phonepeTransactionId : {
-      type: String, // Stores the Cashfree transaction ID
+    phonepeTransactionId: {
+      type: String, // Keep as String - this is correct
       default: null,
+      index: true, // Add index for faster queries
     },
     phonePeOrderId: {
-      type: String,  // Stores the Cashfree order ID reference
+      type: String,
       default: null,
     },
     shippingAddress: {
@@ -47,7 +55,7 @@ const mainOrderSchema = new mongoose.Schema(
         ref: "Order",
       },
     ],
-     isPendingPayment: {
+    isPendingPayment: {
       type: Boolean,
       default: false,
     },
@@ -58,5 +66,8 @@ const mainOrderSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Add compound index for faster queries
+mainOrderSchema.index({ phonepeTransactionId: 1, isPendingPayment: 1 });
 
 module.exports = mongoose.model("MainOrder", mainOrderSchema);
