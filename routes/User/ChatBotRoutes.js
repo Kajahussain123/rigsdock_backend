@@ -364,20 +364,44 @@ router.post('/chat', async (req, res) => {
     }
 });
 
-// Route to get chat history for admin panel
+// Route to get chat history for admin panel with search functionality
 router.get('/chat-logs', async (req, res) => {
     try {
-        const { userId, limit = 50 } = req.query;
+        const { userId, phone, limit = 50, search } = req.query;
         let query = {};
         
+        // If userId is provided
         if (userId) {
             query.userId = userId;
+        }
+        
+        // If phone number is provided
+        if (phone) {
+            // First find users with this phone number
+            const users = await User.find({ phone }).select('_id');
+            const userIds = users.map(user => user._id);
+            
+            // Add to query
+            if (userIds.length > 0) {
+                query.userId = { $in: userIds };
+            } else {
+                // No users found with this phone number
+                return res.json([]);
+            }
+        }
+        
+        // General text search (searches both userMessage and botReply)
+        if (search) {
+            query.$or = [
+                { userMessage: { $regex: search, $options: 'i' } },
+                { botReply: { $regex: search, $options: 'i' } }
+            ];
         }
         
         const logs = await ChatLog.find(query)
             .sort({ timestamp: -1 })
             .limit(parseInt(limit))
-            .populate('userId');
+            .populate('userId', 'name email phone'); // Include phone in the populated fields
             
         res.json(logs);
     } catch (error) {
