@@ -741,9 +741,13 @@ exports.getVendorById = async (req, res) => {
                 ]
             });
 
-        // Filter orders that include items from this vendor
+        // Filter orders that include items from this vendor with proper null checks
         const vendorOrders = orders.filter(order =>
-            order.items.some(item => item.product.owner?._id.toString() === id)
+            order.items.some(item => 
+                item.product && 
+                item.product.owner && 
+                item.product.owner._id.toString() === id
+            )
         );
 
         let totalSettledAmount = 0;
@@ -751,13 +755,18 @@ exports.getVendorById = async (req, res) => {
         let transactionHistory = [];
 
         for (const order of vendorOrders) {
-            const vendorItems = order.items.filter(item => item.product.owner?._id.toString() === id);
+            const vendorItems = order.items.filter(item => 
+                item.product && 
+                item.product.owner && 
+                item.product.owner._id.toString() === id
+            );
 
             let vendorAmount = 0;
             let commission = 0;
 
             const detailedItems = vendorItems.map(item => {
-                const commissionPercentage = item.product.category?.commissionPercentage || 0;
+                // Add null checks for product and category
+                const commissionPercentage = (item.product && item.product.category && item.product.category.commissionPercentage) || 0;
                 const commissionAmount = (item.price * commissionPercentage) / 100;
                 const vendorNet = item.price - commissionAmount;
 
@@ -765,7 +774,7 @@ exports.getVendorById = async (req, res) => {
                 commission += commissionAmount;
 
                 return {
-                    productName: item.product.name,
+                    productName: item.product ? item.product.name : 'Unknown Product',
                     price: item.price,
                     commissionPercentage,
                     commissionAmount,
