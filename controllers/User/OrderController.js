@@ -42,174 +42,6 @@ const phonePeClient = StandardCheckoutClient.getInstance(
   PHONEPE_ENV
 );
 
-// exports.placeOrder = async (req, res) => {
-//   try {
-//       const { userId, shippingAddressId, paymentMethod } = req.body;
-
-//       // Fetch user's cart
-//       const cart = await Cart.findOne({ user: userId }).populate("items.product");
-
-//       if (!cart || cart.items.length === 0) {
-//           return res.status(400).json({ message: "Cart is empty" });
-//       }
-
-//       // Validate shipping address
-//       const shippingAddress = await Address.findById(shippingAddressId);
-//       if (!shippingAddress) {
-//           return res.status(400).json({ message: "Invalid shipping address" });
-//       }
-
-//       // Validate payment method
-//       const validPaymentMethods = ["COD", "PhonePe", "Credit Card", "Debit Card", "UPI"];
-//       if (!validPaymentMethods.includes(paymentMethod)) {
-//           return res.status(400).json({ message: "Invalid payment method" });
-//       }
-
-//       // Group items by vendor
-//       const vendorOrders = {};
-//       let totalAmount = 0;
-
-//       cart.items.forEach(item => {
-//           const vendorId = item.product.owner ? item.product.owner.toString() : null;
-//           if (!vendorId) {
-//               console.error("Error: Product missing owner field", item.product);
-//               return;
-//           }
-
-//           if (!vendorOrders[vendorId]) {
-//               vendorOrders[vendorId] = { vendor: vendorId, items: [], totalPrice: 0 };
-//           }
-
-//           vendorOrders[vendorId].items.push({
-//               product: item.product._id,
-//               quantity: item.quantity,
-//               price: item.price,
-//           });
-
-//           vendorOrders[vendorId].totalPrice += item.price * item.quantity;
-//           totalAmount += item.price * item.quantity;
-//       });
-
-//       // Create Main Order
-//       const mainOrder = new MainOrder({
-//           user: userId,
-//           totalAmount,
-//           paymentMethod,
-//           paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
-//           orderStatus: "Processing",
-//           shippingAddress: shippingAddressId,
-//           subOrders: [],
-//       });
-
-//       await mainOrder.save();
-
-//       // Create vendor orders
-//       const createdOrders = [];
-//       for (const vendorId in vendorOrders) {
-//           const orderData = vendorOrders[vendorId];
-
-//           const newOrder = new Order({
-//               mainOrderId: mainOrder._id,
-//               user: userId,
-//               vendor: vendorId,
-//               items: orderData.items,
-//               totalPrice: orderData.totalPrice,
-//               paymentMethod,
-//               paymentStatus: paymentMethod === "COD" ? "Pending" : "Processing",
-//               orderStatus: "Processing",
-//               shippingAddress: shippingAddressId,
-//           });
-
-//           await newOrder.save();
-//           createdOrders.push(newOrder._id);
-//       }
-
-//       // Update Main Order with subOrders
-//       mainOrder.subOrders = createdOrders;
-//       await mainOrder.save();
-
-//       // Create Shiprocket shipments for each sub-order
-//       const shiprocketResponses = [];
-//       for (const subOrderId of createdOrders) {
-//           const subOrder = await Order.findById(subOrderId).populate('items.product');
-
-//           // Create Shiprocket order for each subOrder
-//           const response = await createShiprocketOrder(subOrder, mainOrder, shippingAddress, userId);
-
-//           // Save Shiprocket IDs to the subOrder
-//           subOrder.shiprocketOrderId = response.order_id;
-//           subOrder.shiprocketShipmentId = response.shipment_id;
-//           await subOrder.save();
-
-//           shiprocketResponses.push(response);
-//       }
-
-//       // Prepare response data based on payment method
-//       let responseData;
-
-//       if (paymentMethod === "COD") {
-//           await Cart.findOneAndUpdate({ user: userId }, { items: [], totalPrice: 0, coupon: null });
-//           responseData = {
-//               message: "Order placed successfully with Cash on Delivery",
-//               mainOrderId: mainOrder._id,
-//               orders: createdOrders,
-//               shiprocketResponses,
-//           };
-//       }
-//       else if (paymentMethod === "PhonePe") {
-//           const merchantTransactionId = randomUUID();
-//           const amountInPaisa = totalAmount * 100;
-//           const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?order_id=${mainOrder._id}`;
-
-//           const metaInfo = {
-//               udf1: "order",
-//               udf2: userId
-//           };
-
-//           const payRequest = StandardCheckoutPayRequest.builder()
-//               .merchantOrderId(merchantTransactionId)
-//               .amount(amountInPaisa)
-//               .redirectUrl(redirectUrl)
-//               .metaInfo(metaInfo)
-//               .build();
-
-//           const phonepeResponse = await phonePeClient.pay(payRequest);
-
-//           mainOrder.phonepeTransactionId = merchantTransactionId;
-//           await mainOrder.save();
-
-//           responseData = {
-//               message: "Proceed to PhonePe Payment",
-//               paymentUrl: phonepeResponse.redirectUrl,
-//               mainOrderId: mainOrder._id,
-//               orders: createdOrders,
-//               phonepeTransactionId: merchantTransactionId,
-//               shiprocketResponses,
-//           };
-//       }
-//       else {
-//           responseData = {
-//               message: "Payment method not implemented yet",
-//               mainOrderId: mainOrder._id,
-//               orders: createdOrders,
-//               shiprocketResponses,
-//           };
-//       }
-
-//       // Send a single response at the end
-//       res.status(201).json(responseData);
-
-//   } catch (error) {
-//       console.error("Error placing order:", error);
-//       if (!res.headersSent) {
-//           res.status(500).json({
-//               message: "Error placing order",
-//               error: error.message,
-//               stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-//           });
-//       }
-//   }
-// };
 
 exports.placeOrder = async (req, res) => {
   try {
@@ -507,6 +339,8 @@ async function createShiprocketShipments(
   return shiprocketResponses;
 }
 
+
+
 // Updated PhonePe Webhook Handler
 exports.phonepeWebhook = async (req, res) => {
   console.log("=== PhonePe Webhook Received ===", {
@@ -803,6 +637,7 @@ exports.phonepeWebhook = async (req, res) => {
 exports.checkPaymentStatus = async (req, res) => {
   try {
     const { orderId, transactionId } = req.params;
+    console.log('Checking payment status for:', { orderId, transactionId });
 
     let mainOrder;
 
@@ -811,14 +646,29 @@ exports.checkPaymentStatus = async (req, res) => {
       mainOrder = await MainOrder.findById(orderId);
     } else if (transactionId) {
       mainOrder = await MainOrder.findOne({
-        phonepeTransactionId: transactionId.toString(), // Ensure string comparison
+        $or: [
+          { phonepeTransactionId: transactionId.toString() },
+          { merchantOrderId: transactionId.toString() }
+        ]
       });
     }
 
     if (!mainOrder) {
-      return res.status(404).json({ message: "Order not found" });
+      console.error('Order not found for:', { orderId, transactionId });
+      return res.status(404).json({ 
+        message: "Order not found",
+        success: false
+      });
     }
 
+    console.log('Found order:', {
+      orderId: mainOrder._id,
+      transactionId: mainOrder.phonepeTransactionId,
+      paymentStatus: mainOrder.paymentStatus,
+      isPendingPayment: mainOrder.isPendingPayment
+    });
+
+    // If this is a PhonePe payment, check its status
     if (mainOrder.phonepeTransactionId) {
       try {
         const statusResponse = await phonePeClient.getOrderStatus(
@@ -826,127 +676,180 @@ exports.checkPaymentStatus = async (req, res) => {
         );
         const phonepeStatus = statusResponse.state;
 
-        console.log(
-          `Checking status for ${mainOrder.phonepeTransactionId}: ${phonepeStatus}`
-        );
+        console.log('PhonePe status response:', {
+          phonepeStatus,
+          dbPaymentStatus: mainOrder.paymentStatus,
+          isPendingPayment: mainOrder.isPendingPayment
+        });
 
-        // Update the order in DB if payment completed and orders not yet created
-        // In checkPaymentStatus, add a fallback for when webhook fails
-        if (phonepeStatus === "COMPLETED" && mainOrder.isPendingPayment) {
+        // Handle completed payments where order wasn't created
+        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") && 
+            mainOrder.isPendingPayment) {
+          console.log('Payment completed but order pending - attempting to complete order');
+          
           try {
-            // Try to complete the order if webhook missed it
-            if (!mainOrder.pendingCartData) {
-              console.error(
-                "Missing cart data for pending order:",
-                mainOrder._id
-              );
-              return res.status(200).json({
-                orderId: mainOrder._id,
-                paymentStatus: "Paid but order incomplete",
-                orderStatus: "Error - contact support",
-                phonepeStatus,
-              });
+            // Parse cart data safely
+            let vendorOrders;
+            try {
+              const cartData = typeof mainOrder.pendingCartData === 'string' ? 
+                JSON.parse(mainOrder.pendingCartData) : 
+                mainOrder.pendingCartData;
+              vendorOrders = cartData?.vendorOrders;
+            } catch (parseError) {
+              console.error('Failed to parse cart data:', parseError);
+              throw new Error('Invalid cart data');
             }
 
-            // Create the actual orders
-            const { createdOrders } = await createOrdersInDatabase(
-              mainOrder.user,
-              mainOrder.subtotal,
-              mainOrder.platformFee,
-              mainOrder.totalAmount,
-              mainOrder.paymentMethod,
-              mainOrder.shippingAddress,
-              mainOrder.pendingCartData.vendorOrders
-            );
+            if (!vendorOrders) {
+              console.error('Missing vendor orders in cart data');
+              throw new Error('Missing order data');
+            }
 
-            // Update main order
+            // Start a session for atomic operations
+            const session = await mongoose.startSession();
+            session.startTransaction();
+
+            try {
+              // Create the actual orders
+              const { createdOrders } = await createOrdersInDatabase(
+                mainOrder.user,
+                mainOrder.subtotal,
+                mainOrder.platformFee,
+                mainOrder.totalAmount,
+                mainOrder.paymentMethod,
+                mainOrder.shippingAddress,
+                vendorOrders,
+                session
+              );
+
+              console.log('Orders created successfully:', createdOrders);
+
+              // Update main order status
+              mainOrder.paymentStatus = "Paid";
+              mainOrder.orderStatus = "Processing";
+              mainOrder.subOrders = createdOrders;
+              mainOrder.isPendingPayment = false;
+              mainOrder.pendingCartData = undefined;
+              await mainOrder.save({ session });
+
+              // Commit transaction
+              await session.commitTransaction();
+              session.endSession();
+
+              console.log('Order successfully completed in checkPaymentStatus');
+
+              // Async operations after successful order creation
+              setTimeout(async () => {
+                try {
+                  // Create Shiprocket shipments
+                  const shippingAddress = await Address.findById(
+                    mainOrder.shippingAddress
+                  );
+                  if (shippingAddress) {
+                    await createShiprocketShipments(
+                      createdOrders,
+                      mainOrder,
+                      shippingAddress,
+                      mainOrder.user
+                    );
+                    console.log('Shiprocket shipments created');
+                  }
+
+                  // Clear the cart
+                  await Cart.findOneAndUpdate(
+                    { user: mainOrder.user },
+                    { items: [], totalPrice: 0, coupon: null }
+                  );
+                  console.log('Cart cleared');
+                } catch (asyncError) {
+                  console.error('Async operations failed:', asyncError);
+                }
+              }, 1000);
+
+              return res.status(200).json({
+                success: true,
+                orderId: mainOrder._id,
+                paymentStatus: "Paid",
+                orderStatus: "Processing",
+                phonepeStatus,
+                hasSubOrders: true,
+                message: "Order successfully completed"
+              });
+
+            } catch (transactionError) {
+              await session.abortTransaction();
+              session.endSession();
+              console.error('Transaction failed:', transactionError);
+              throw transactionError;
+            }
+
+          } catch (completionError) {
+            console.error('Failed to complete order:', completionError);
+            
+            // Mark as paid but with error status
             mainOrder.paymentStatus = "Paid";
-            mainOrder.orderStatus = "Processing";
-            mainOrder.subOrders = createdOrders;
-            mainOrder.isPendingPayment = false;
-            mainOrder.pendingCartData = undefined;
+            mainOrder.orderStatus = "Error - contact support";
             await mainOrder.save();
 
-            // Create Shiprocket shipments
-            const shippingAddress = await Address.findById(
-              mainOrder.shippingAddress
-            );
-            await createShiprocketShipments(
-              createdOrders,
-              mainOrder,
-              shippingAddress,
-              mainOrder.user
-            );
-
-            // Clear the cart
-            await Cart.findOneAndUpdate(
-              { user: mainOrder.user },
-              { items: [], totalPrice: 0, coupon: null }
-            );
-
             return res.status(200).json({
+              success: false,
               orderId: mainOrder._id,
               paymentStatus: "Paid",
-              orderStatus: "Processing",
-              phonepeStatus,
-              hasSubOrders: true,
-            });
-          } catch (completionError) {
-            console.error(
-              "Error completing order in checkStatus:",
-              completionError
-            );
-            return res.status(200).json({
-              orderId: mainOrder._id,
-              paymentStatus: "Paid but order incomplete",
               orderStatus: "Error - contact support",
               phonepeStatus,
+              message: "Payment received but order creation failed"
             });
           }
         }
 
-        if (
-          (phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
-          mainOrder.paymentStatus !== "Failed"
-        ) {
+        // Handle failed payments
+        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") && 
+            mainOrder.paymentStatus !== "Failed") {
           mainOrder.paymentStatus = "Failed";
           mainOrder.orderStatus = "Failed";
           await mainOrder.save();
+          console.log('Order marked as failed');
         }
 
         return res.status(200).json({
+          success: true,
           orderId: mainOrder._id,
-          paymentStatus:
-            phonepeStatus === "COMPLETED" ? "Paid" : mainOrder.paymentStatus,
-          orderStatus:
-            phonepeStatus === "COMPLETED"
-              ? "Processing"
-              : mainOrder.orderStatus,
+          paymentStatus: mainOrder.paymentStatus,
+          orderStatus: mainOrder.orderStatus,
           phonepeStatus,
           hasSubOrders: mainOrder.subOrders && mainOrder.subOrders.length > 0,
+          isPendingPayment: mainOrder.isPendingPayment
         });
+
       } catch (phonepeError) {
-        console.error("Error getting PhonePe status:", phonepeError);
+        console.error('Error checking PhonePe status:', phonepeError);
         return res.status(200).json({
+          success: false,
           orderId: mainOrder._id,
           paymentStatus: mainOrder.paymentStatus,
           orderStatus: mainOrder.orderStatus,
           phonepeStatus: "Error fetching status",
+          message: "Error checking payment status with PhonePe"
         });
       }
     }
 
     // For non-PhonePe orders, return current status
     return res.status(200).json({
+      success: true,
       orderId: mainOrder._id,
       paymentStatus: mainOrder.paymentStatus,
-      orderStatus: mainOrder.orderStatus,
+      orderStatus: mainOrder.orderStatus
     });
+
   } catch (error) {
-    console.error("Error checking payment status:", error);
-    res
-      .status(500)
-      .json({ message: "Error checking payment status", error: error.message });
+    console.error('Error in checkPaymentStatus:', error);
+    res.status(500).json({ 
+      success: false,
+      message: "Error checking payment status",
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
