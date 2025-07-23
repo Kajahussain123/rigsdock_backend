@@ -13,11 +13,6 @@ const homeCategorySchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, 'Subtitle cannot exceed 200 characters']
   },
-  categoryId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Category',
-    required: [true, 'Category ID is required']
-  },
   image: {
     type: String,
     required: [true, 'Image is required']
@@ -35,7 +30,6 @@ const homeCategorySchema = new mongoose.Schema({
 });
 
 // Index for better performance
-homeCategorySchema.index({ categoryId: 1 });
 homeCategorySchema.index({ isActive: 1 });
 homeCategorySchema.index({ order: 1 });
 
