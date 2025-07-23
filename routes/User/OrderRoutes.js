@@ -23,7 +23,7 @@ router.post('/phonepe-webhook', orderController.phonepeWebhook);
 router.get("/main/:mainOrderId", orderController.getOrdersByMainOrderId);
 
 // Check payment status
-router.get('/payment-status/:orderId', orderController.checkPaymentStatus);
+router.get('/payment-status/:orderId?/:transactionId?', orderController.checkPaymentStatus);
 
 
 module.exports = router;
