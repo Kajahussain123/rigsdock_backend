@@ -1,5 +1,4 @@
 const HomeCategory = require("../../../models/admin/homeCategoryModel");
-const Category = require("../../../models/admin/categoryModel");
 const fs = require('fs');
 const path = require('path');
 

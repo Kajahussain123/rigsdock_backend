@@ -196,7 +196,7 @@ exports.placeOrder = async (req, res) => {
         transactionId: merchantTransactionId
       });
 
-      // FIXED: Use mainOrderId in redirect URL instead of transaction_id
+      // FIXED: Use mainOrderId in redirect URL instead omlf transaction_id
       const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?mainOrderId=${pendingOrder._id}`;
 
       const metaInfo = {
