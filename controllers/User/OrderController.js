@@ -156,81 +156,88 @@ exports.placeOrder = async (req, res) => {
         shiprocketResponses,
       });
     } else if (paymentMethod === "PhonePe") {
-  const merchantTransactionId = `TXN_${Date.now()}_${randomUUID().slice(0, 8)}`;
-  const amountInPaisa = Math.round(totalAmount * 100);
-  
-  // Create pending order first to get the mainOrderId
-  const pendingOrder = new MainOrder({
-    user: userId,
-    subtotal,
-    platformFee: platformFeeAmount,
-    totalAmount,
-    paymentMethod,
-    paymentStatus: "Pending",
-    orderStatus: "Pending",
-    shippingAddress: shippingAddressId,
-    phonepeTransactionId: merchantTransactionId,
-    merchantOrderId: merchantTransactionId,
-    subOrders: [],
-    isPendingPayment: true,
-    pendingCartData: JSON.stringify({
-      vendorOrders,
-      shippingAddressId,
-      userId
-    })
-  });
+      // Generate consistent transaction ID
+      const merchantTransactionId = `TXN_${Date.now()}_${randomUUID().slice(0, 8)}`;
+      const amountInPaisa = Math.round(totalAmount * 100); // Ensure integer
 
-  await pendingOrder.save();
+      console.log("Creating PhonePe payment with:", {
+        merchantTransactionId,
+        amountInPaisa,
+        totalAmount,
+        userId
+      });
 
-  // Use the pendingOrder._id (mainOrderId) in the redirect URL
-  const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?orderId=${pendingOrder._id}`;
+      // Create pending order first to get the mainOrderId
+      const pendingOrder = new MainOrder({
+        user: userId,
+        subtotal,
+        platformFee: platformFeeAmount,
+        totalAmount,
+        paymentMethod,
+        paymentStatus: "Pending",
+        orderStatus: "Pending",
+        shippingAddress: shippingAddressId,
+        phonepeTransactionId: merchantTransactionId,
+        merchantOrderId: merchantTransactionId, // Keep them same for consistency
+        subOrders: [],
+        isPendingPayment: true,
+        // Store cart data as JSON string
+        pendingCartData: JSON.stringify({
+          vendorOrders,
+          shippingAddressId,
+          userId // Add userId for safety
+        })
+      });
 
-  console.log("Creating PhonePe payment with:", {
-    merchantTransactionId,
-    amountInPaisa,
-    totalAmount,
-    userId,
-    mainOrderId: pendingOrder._id
-  });
+      await pendingOrder.save();
 
-  const metaInfo = {
-    udf1: "order",
-    udf2: userId,
-  };
+      console.log("Pending order created:", {
+        orderId: pendingOrder._id,
+        transactionId: merchantTransactionId
+      });
 
-  try {
-    const payRequest = StandardCheckoutPayRequest.builder()
-      .merchantOrderId(merchantTransactionId)
-      .amount(amountInPaisa)
-      .redirectUrl(redirectUrl)
-      .metaInfo(metaInfo)
-      .build();
+      // FIXED: Use mainOrderId in redirect URL instead of transaction_id
+      const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?mainOrderId=${pendingOrder._id}`;
 
-    const phonepeResponse = await phonePeClient.pay(payRequest);
+      const metaInfo = {
+        udf1: "order",
+        udf2: userId,
+      };
 
-    console.log("PhonePe payment URL created:", {
-      redirectUrl: phonepeResponse.redirectUrl,
-      mainOrderId: pendingOrder._id
-    });
+      try {
+        const payRequest = StandardCheckoutPayRequest.builder()
+          .merchantOrderId(merchantTransactionId)
+          .amount(amountInPaisa)
+          .redirectUrl(redirectUrl)
+          .metaInfo(metaInfo)
+          .build();
 
-    return res.status(201).json({
-      message: "Proceed to PhonePe Payment",
-      paymentUrl: phonepeResponse.redirectUrl,
-      pendingOrderId: pendingOrder._id,
-      subtotal,
-      platformFee: platformFeeAmount,
-      totalAmount,
-      phonepeTransactionId: merchantTransactionId,
-    });
-  } catch (phonepeError) {
-    console.error("PhonePe payment creation failed:", phonepeError);
-    await MainOrder.findByIdAndDelete(pendingOrder._id);
-    return res.status(500).json({
-      message: "Failed to create PhonePe payment",
-      error: phonepeError.message
-    });
-  }
-}else {
+        const phonepeResponse = await phonePeClient.pay(payRequest);
+
+        console.log("PhonePe payment URL created:", phonepeResponse.redirectUrl);
+
+        return res.status(201).json({
+          message: "Proceed to PhonePe Payment",
+          paymentUrl: phonepeResponse.redirectUrl,
+          pendingOrderId: pendingOrder._id,
+          mainOrderId: pendingOrder._id, // Added for consistency
+          subtotal,
+          platformFee: platformFeeAmount,
+          totalAmount,
+          phonepeTransactionId: merchantTransactionId,
+        });
+      } catch (phonepeError) {
+        console.error("PhonePe payment creation failed:", phonepeError);
+        
+        // Clean up pending order if PhonePe fails
+        await MainOrder.findByIdAndDelete(pendingOrder._id);
+        
+        return res.status(500).json({
+          message: "Failed to create PhonePe payment",
+          error: phonepeError.message
+        });
+      }
+    } else {
       return res.status(400).json({
         message: "Payment method not implemented yet",
       });
