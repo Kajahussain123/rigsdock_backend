@@ -6,7 +6,7 @@ const path = require('path');
 // Create a new home category
 const createHomeCategory = async (req, res) => {
   try {
-    const { title, subtitle, categoryId } = req.body;
+    const { title, subtitle } = req.body;
     
     // Check if image was uploaded
     if (!req.file) {
@@ -17,27 +17,14 @@ const createHomeCategory = async (req, res) => {
     }
 
     // Validate required fields
-    if (!title || !subtitle || !categoryId) {
+    if (!title || !subtitle) {
       // Delete uploaded file if validation fails
       if (req.file) {
         fs.unlinkSync(req.file.path);
       }
       return res.status(400).json({
         success: false,
-        message: "Title, subtitle, and category ID are required"
-      });
-    }
-
-    // Check if category exists
-    const categoryExists = await Category.findById(categoryId);
-    if (!categoryExists) {
-      // Delete uploaded file if category doesn't exist
-      if (req.file) {
-        fs.unlinkSync(req.file.path);
-      }
-      return res.status(404).json({
-        success: false,
-        message: "Category not found"
+        message: "Title and subtitle are required"
       });
     }
 
@@ -45,7 +32,6 @@ const createHomeCategory = async (req, res) => {
     const newHomeCategory = new HomeCategory({
       title,
       subtitle,
-      categoryId,
       image: req.file.path // or req.file.filename depending on your multer config
     });
 
@@ -76,7 +62,6 @@ const createHomeCategory = async (req, res) => {
 const getAllHomeCategories = async (req, res) => {
   try {
     const homeCategories = await HomeCategory.find()
-      .populate('categoryId', 'name description') // Populate category details
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -100,8 +85,7 @@ const getHomeCategoryById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const homeCategory = await HomeCategory.findById(id)
-      .populate('categoryId', 'name description');
+    const homeCategory = await HomeCategory.findById(id);
 
     if (!homeCategory) {
       return res.status(404).json({
@@ -125,11 +109,12 @@ const getHomeCategoryById = async (req, res) => {
   }
 };
 
+
 // Update home category
 const updateHomeCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, subtitle, categoryId } = req.body;
+    const { title, subtitle } = req.body;
 
     // Find existing home category
     const existingCategory = await HomeCategory.findById(id);
@@ -144,26 +129,11 @@ const updateHomeCategory = async (req, res) => {
       });
     }
 
-    // If categoryId is being updated, validate it exists
-    if (categoryId && categoryId !== existingCategory.categoryId.toString()) {
-      const categoryExists = await Category.findById(categoryId);
-      if (!categoryExists) {
-        if (req.file) {
-          fs.unlinkSync(req.file.path);
-        }
-        return res.status(404).json({
-          success: false,
-          message: "Category not found"
-        });
-      }
-    }
-
     // Prepare update data
     const updateData = {};
 
     if (title) updateData.title = title;
     if (subtitle) updateData.subtitle = subtitle;
-    if (categoryId) updateData.categoryId = categoryId;
 
     // Handle image update
     if (req.file) {
@@ -179,7 +149,7 @@ const updateHomeCategory = async (req, res) => {
       id,
       updateData,
       { new: true, runValidators: true }
-    ).populate('categoryId', 'name description');
+    );
 
     res.status(200).json({
       success: true,
