@@ -159,7 +159,7 @@ exports.placeOrder = async (req, res) => {
       // FIXED: Use consistent transaction ID
       const merchantTransactionId = `TXN_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const amountInPaisa = Math.round(totalAmount * 100); // Ensure integer
-      const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?transaction_id=${merchantTransactionId}`;
+       const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?orderId=${pendingOrder._id}`;
 
       console.log("Creating PhonePe payment with:", {
         merchantTransactionId,
@@ -338,8 +338,6 @@ async function createShiprocketShipments(
   }
   return shiprocketResponses;
 }
-
-
 
 // Updated PhonePe Webhook Handler
 exports.phonepeWebhook = async (req, res) => {
@@ -627,7 +625,6 @@ exports.phonepeWebhook = async (req, res) => {
     session.endSession();
   }
 };
-
 
 // Updated Check payment status endpoint
 exports.checkPaymentStatus = async (req, res) => {
