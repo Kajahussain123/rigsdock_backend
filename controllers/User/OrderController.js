@@ -42,7 +42,6 @@ const phonePeClient = StandardCheckoutClient.getInstance(
   PHONEPE_ENV
 );
 
-
 exports.placeOrder = async (req, res) => {
   try {
     const { userId, shippingAddressId, paymentMethod } = req.body;
@@ -156,11 +155,11 @@ exports.placeOrder = async (req, res) => {
         shiprocketResponses,
       });
     } else if (paymentMethod === "PhonePe") {
-      // Generate consistent transaction ID
+
       const merchantTransactionId = `TXN_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const amountInPaisa = Math.round(totalAmount * 100); // Ensure integer
 
-       const shippingAddressSnapshot = {
+      const shippingAddressSnapshot = {
         firstName: shippingAddress.firstName,
         lastName: shippingAddress.lastName,
         phone: shippingAddress.phone,
@@ -190,7 +189,7 @@ exports.placeOrder = async (req, res) => {
         paymentStatus: "Pending",
         orderStatus: "Pending",
         shippingAddress: shippingAddressId,
-         shippingAddressSnapshot,
+        shippingAddressSnapshot,
         phonepeTransactionId: merchantTransactionId,
         merchantOrderId: merchantTransactionId, // Keep them same for consistency
         subOrders: [],
@@ -273,7 +272,6 @@ exports.placeOrder = async (req, res) => {
   }
 };
 
-// Helper function to create orders in d    atabase
 async function createOrdersInDatabase(
   userId,
   subtotal,
@@ -349,7 +347,6 @@ async function createOrdersInDatabase(
   return { mainOrder, createdOrders };
 }
 
-// Helper function to create Shiprocket shipments
 async function createShiprocketShipments(
   createdOrders,
   mainOrder,
@@ -376,7 +373,6 @@ async function createShiprocketShipments(
   return shiprocketResponses;
 }
 
-// Updated PhonePe Webhook Handler
 exports.phonepeWebhook = async (req, res) => {
   console.log("=== PhonePe Webhook Received ===", {
     headers: req.headers,
@@ -427,11 +423,11 @@ exports.phonepeWebhook = async (req, res) => {
       });
     }
 
-    // FIXED: Extract transaction details more safely
+    // Extract transaction details safely
     const payload = callbackResponse.payload || callbackResponse;
-    const merchantTransactionId = payload.orderId?.toString() ||
-      payload.merchantTransactionId?.toString() ||
-      payload.merchantOrderId?.toString();
+    const merchantTransactionId = payload.orderId?.toString() || 
+                                payload.merchantTransactionId?.toString() ||
+                                payload.merchantOrderId?.toString();
     const state = payload.state;
     const transactionAmount = payload.amount ? payload.amount / 100 : 0;
 
@@ -451,19 +447,19 @@ exports.phonepeWebhook = async (req, res) => {
       });
     }
 
-    // FIXED: Find the pending order with better query
+    // Find the pending order
     const pendingOrder = await MainOrder.findOne({
       $or: [
-        { phonepeTransactionId: payload.merchantOrderId }, // This matches what you store
-        { merchantOrderId: payload.merchantOrderId }      // Secondary match
+        { phonepeTransactionId: merchantTransactionId },
+        { merchantOrderId: merchantTransactionId }
       ],
       isPendingPayment: true
     }).session(session);
 
     if (!pendingOrder) {
       console.error("Pending Order Not Found for transaction:", merchantTransactionId);
-
-      // Debug: list recent pending orders
+      
+      // Debug logging
       const recentOrders = await MainOrder.find({
         isPendingPayment: true,
         createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
@@ -472,7 +468,7 @@ exports.phonepeWebhook = async (req, res) => {
       console.log("Recent pending orders:", recentOrders);
 
       await session.abortTransaction();
-      return res.status(404).json({
+      return res.status(404).json({ 
         message: "Order not found",
         success: false,
         transactionId: merchantTransactionId
@@ -482,7 +478,8 @@ exports.phonepeWebhook = async (req, res) => {
     console.log("Found pending order:", {
       orderId: pendingOrder._id,
       transactionId: pendingOrder.phonepeTransactionId,
-      amount: pendingOrder.totalAmount
+      amount: pendingOrder.totalAmount,
+      userId: pendingOrder.user
     });
 
     // Handle different payment states
@@ -500,25 +497,20 @@ exports.phonepeWebhook = async (req, res) => {
         });
       }
 
-      // FIXED: Parse cart data safely
+      // Parse cart data safely
       let vendorOrders;
       try {
-        if (typeof pendingOrder.pendingCartData === 'string') {
-          const cartData = JSON.parse(pendingOrder.pendingCartData);
-          vendorOrders = cartData.vendorOrders;
-        } else if (pendingOrder.pendingCartData?.vendorOrders) {
-          vendorOrders = pendingOrder.pendingCartData.vendorOrders;
+        const cartData = typeof pendingOrder.pendingCartData === 'string' ?
+          JSON.parse(pendingOrder.pendingCartData) :
+          pendingOrder.pendingCartData;
+        vendorOrders = cartData?.vendorOrders;
+        
+        if (!vendorOrders) {
+          throw new Error("Vendor orders not found in cart data");
         }
       } catch (parseError) {
-        console.error("Failed to parse cart data:", parseError);
-      }
-
-      if (!vendorOrders) {
         await session.abortTransaction();
-        console.error("Missing Cart Data for Order:", {
-          orderId: pendingOrder._id,
-          cartData: pendingOrder.pendingCartData
-        });
+        console.error("Failed to parse cart data:", parseError);
         return res.status(400).json({
           message: "Missing cart data for order completion",
           success: false,
@@ -527,6 +519,26 @@ exports.phonepeWebhook = async (req, res) => {
 
       try {
         console.log("Creating orders in database...");
+        
+        // Get shipping address details
+        const shippingAddress = await Address.findById(pendingOrder.shippingAddress).session(session);
+        if (!shippingAddress) {
+          throw new Error("Shipping address not found");
+        }
+
+        // Create address snapshot
+        const shippingAddressSnapshot = {
+          firstName: shippingAddress.firstName,
+          lastName: shippingAddress.lastName,
+          phone: shippingAddress.phone,
+          addressLine1: shippingAddress.addressLine1,
+          addressLine2: shippingAddress.addressLine2,
+          city: shippingAddress.city,
+          state: shippingAddress.state,
+          zipCode: shippingAddress.zipCode,
+          country: shippingAddress.country,
+          addressType: shippingAddress.addressType,
+        };
 
         // Create the actual orders
         const { createdOrders } = await createOrdersInDatabase(
@@ -548,42 +560,38 @@ exports.phonepeWebhook = async (req, res) => {
         pendingOrder.subOrders = createdOrders;
         pendingOrder.isPendingPayment = false;
         pendingOrder.pendingCartData = undefined;
+        pendingOrder.shippingAddressSnapshot = shippingAddressSnapshot;
         await pendingOrder.save({ session });
 
         // Commit the transaction
         await session.commitTransaction();
+        console.log("Transaction committed successfully");
 
-        console.log("Order Successfully Completed:", {
-          orderId: pendingOrder._id,
-          transactionId: merchantTransactionId,
-          subOrders: createdOrders
-        });
+        // Clear the cart immediately after successful order creation
+        try {
+          const cartUpdateResult = await Cart.findOneAndUpdate(
+            { user: pendingOrder.user },
+            { items: [], totalPrice: 0, coupon: null },
+            { new: true }
+          );
+          console.log("Cart cleared successfully:", cartUpdateResult);
+        } catch (clearError) {
+          console.error("Failed to clear cart:", clearError);
+          // Even if cart clearing fails, we don't want to fail the whole operation
+        }
 
-        // These operations don't need to be in the transaction
+        // Shiprocket can be async
         setTimeout(async () => {
           try {
-            // Create Shiprocket shipments (async)
-            const shippingAddress = await Address.findById(
-              pendingOrder.shippingAddress
+            await createShiprocketShipments(
+              createdOrders,
+              pendingOrder,
+              shippingAddress,
+              pendingOrder.user
             );
-            if (shippingAddress) {
-              await createShiprocketShipments(
-                createdOrders,
-                pendingOrder,
-                shippingAddress,
-                pendingOrder.user
-              );
-              console.log("Shiprocket shipments created");
-            }
-
-            // Clear the cart (async)
-            await Cart.findOneAndUpdate(
-              { user: pendingOrder.user },
-              { items: [], totalPrice: 0, coupon: null }
-            );
-            console.log("Cart cleared");
-          } catch (asyncError) {
-            console.error("Non-critical async operations failed:", asyncError);
+            console.log("Shiprocket shipments created");
+          } catch (shiprocketError) {
+            console.error("Failed to create Shiprocket shipments:", shiprocketError);
           }
         }, 1000);
 
@@ -663,8 +671,10 @@ exports.phonepeWebhook = async (req, res) => {
   }
 };
 
-// Updated Check payment status endpoint
 exports.checkPaymentStatus = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { orderId, transactionId } = req.params;
     console.log('Checking payment status for:', { orderId, transactionId });
@@ -673,19 +683,20 @@ exports.checkPaymentStatus = async (req, res) => {
 
     // Find order by either orderId or transactionId
     if (orderId) {
-      mainOrder = await MainOrder.findById(orderId);
+      mainOrder = await MainOrder.findById(orderId).session(session);
     } else if (transactionId) {
       mainOrder = await MainOrder.findOne({
         $or: [
           { phonepeTransactionId: transactionId.toString() },
           { merchantOrderId: transactionId.toString() }
         ]
-      });
+      }).session(session);
     }
 
     if (!mainOrder) {
       console.error('Order not found for:', { orderId, transactionId });
-      return res.status(404).json({
+      await session.abortTransaction();
+      return res.status(404).json({ 
         message: "Order not found",
         success: false
       });
@@ -713,109 +724,116 @@ exports.checkPaymentStatus = async (req, res) => {
         });
 
         // Handle completed payments where order wasn't created
-        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") &&
-          mainOrder.isPendingPayment) {
+        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") && 
+            mainOrder.isPendingPayment) {
           console.log('Payment completed but order pending - attempting to complete order');
-
+          
           try {
             // Parse cart data safely
             let vendorOrders;
             try {
-              const cartData = typeof mainOrder.pendingCartData === 'string' ?
-                JSON.parse(mainOrder.pendingCartData) :
+              const cartData = typeof mainOrder.pendingCartData === 'string' ? 
+                JSON.parse(mainOrder.pendingCartData) : 
                 mainOrder.pendingCartData;
               vendorOrders = cartData?.vendorOrders;
+              
+              if (!vendorOrders) {
+                throw new Error("Vendor orders not found in cart data");
+              }
             } catch (parseError) {
               console.error('Failed to parse cart data:', parseError);
               throw new Error('Invalid cart data');
             }
 
-            if (!vendorOrders) {
-              console.error('Missing vendor orders in cart data');
-              throw new Error('Missing order data');
+            // Get shipping address details
+            const shippingAddress = await Address.findById(mainOrder.shippingAddress).session(session);
+            if (!shippingAddress) {
+              throw new Error("Shipping address not found");
             }
 
-            // Start a session for atomic operations
-            const session = await mongoose.startSession();
-            session.startTransaction();
+            // Create address snapshot
+            const shippingAddressSnapshot = {
+              firstName: shippingAddress.firstName,
+              lastName: shippingAddress.lastName,
+              phone: shippingAddress.phone,
+              addressLine1: shippingAddress.addressLine1,
+              addressLine2: shippingAddress.addressLine2,
+              city: shippingAddress.city,
+              state: shippingAddress.state,
+              zipCode: shippingAddress.zipCode,
+              country: shippingAddress.country,
+              addressType: shippingAddress.addressType,
+            };
 
+            // Create the actual orders
+            const { createdOrders } = await createOrdersInDatabase(
+              mainOrder.user,
+              mainOrder.subtotal,
+              mainOrder.platformFee,
+              mainOrder.totalAmount,
+              mainOrder.paymentMethod,
+              mainOrder.shippingAddress,
+              vendorOrders,
+              session
+            );
+
+            console.log('Orders created successfully:', createdOrders);
+
+            // Update main order status
+            mainOrder.paymentStatus = "Paid";
+            mainOrder.orderStatus = "Processing";
+            mainOrder.subOrders = createdOrders;
+            mainOrder.isPendingPayment = false;
+            mainOrder.pendingCartData = undefined;
+            mainOrder.shippingAddressSnapshot = shippingAddressSnapshot;
+            await mainOrder.save({ session });
+
+            // Commit transaction
+            await session.commitTransaction();
+            console.log("Transaction committed successfully");
+
+            // Clear the cart immediately after successful order creation
             try {
-              // Create the actual orders
-              const { createdOrders } = await createOrdersInDatabase(
-                mainOrder.user,
-                mainOrder.subtotal,
-                mainOrder.platformFee,
-                mainOrder.totalAmount,
-                mainOrder.paymentMethod,
-                mainOrder.shippingAddress,
-                vendorOrders,
-                session
+              const cartUpdateResult = await Cart.findOneAndUpdate(
+                { user: mainOrder.user },
+                { items: [], totalPrice: 0, coupon: null },
+                { new: true }
               );
-
-              console.log('Orders created successfully:', createdOrders);
-
-              // Update main order status
-              mainOrder.paymentStatus = "Paid";
-              mainOrder.orderStatus = "Processing";
-              mainOrder.subOrders = createdOrders;
-              mainOrder.isPendingPayment = false;
-              mainOrder.pendingCartData = undefined;
-              await mainOrder.save({ session });
-
-              // Commit transaction
-              await session.commitTransaction();
-              session.endSession();
-
-              console.log('Order successfully completed in checkPaymentStatus');
-
-              // Async operations after successful order creation
-              setTimeout(async () => {
-                try {
-                  // Create Shiprocket shipments
-                  const shippingAddress = await Address.findById(
-                    mainOrder.shippingAddress
-                  );
-                  if (shippingAddress) {
-                    await createShiprocketShipments(
-                      createdOrders,
-                      mainOrder,
-                      shippingAddress,
-                      mainOrder.user
-                    );
-                    console.log('Shiprocket shipments created');
-                  }
-
-                  // Clear the cart
-                  await Cart.findOneAndUpdate(
-                    { user: mainOrder.user },
-                    { items: [], totalPrice: 0, coupon: null }
-                  );
-                  console.log('Cart cleared');
-                } catch (asyncError) {
-                  console.error('Async operations failed:', asyncError);
-                }
-              }, 1000);
-
-              return res.status(200).json({
-                success: true,
-                orderId: mainOrder._id,
-                paymentStatus: "Paid",
-                orderStatus: "Processing",
-                phonepeStatus,
-                hasSubOrders: true,
-                message: "Order successfully completed"
-              });
-
-            } catch (transactionError) {
-              await session.abortTransaction();
-              session.endSession();
-              console.error('Transaction failed:', transactionError);
-              throw transactionError;
+              console.log('Cart cleared successfully:', cartUpdateResult);
+            } catch (clearError) {
+              console.error('Failed to clear cart:', clearError);
+              // Even if cart clearing fails, we don't want to fail the whole operation
             }
+
+            // Shiprocket can be async
+            setTimeout(async () => {
+              try {
+                await createShiprocketShipments(
+                  createdOrders,
+                  mainOrder,
+                  shippingAddress,
+                  mainOrder.user
+                );
+                console.log('Shiprocket shipments created');
+              } catch (shiprocketError) {
+                console.error('Failed to create Shiprocket shipments:', shiprocketError);
+              }
+            }, 1000);
+
+            return res.status(200).json({
+              success: true,
+              orderId: mainOrder._id,
+              paymentStatus: "Paid",
+              orderStatus: "Processing",
+              phonepeStatus,
+              hasSubOrders: true,
+              message: "Order successfully completed"
+            });
 
           } catch (completionError) {
+            await session.abortTransaction();
             console.error('Failed to complete order:', completionError);
-
+            
             // Mark as paid but with error status
             mainOrder.paymentStatus = "Paid";
             mainOrder.orderStatus = "Error - contact support";
@@ -833,11 +851,12 @@ exports.checkPaymentStatus = async (req, res) => {
         }
 
         // Handle failed payments
-        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
-          mainOrder.paymentStatus !== "Failed") {
+        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") && 
+            mainOrder.paymentStatus !== "Failed") {
           mainOrder.paymentStatus = "Failed";
           mainOrder.orderStatus = "Failed";
-          await mainOrder.save();
+          await mainOrder.save({ session });
+          await session.commitTransaction();
           console.log('Order marked as failed');
         }
 
@@ -852,6 +871,7 @@ exports.checkPaymentStatus = async (req, res) => {
         });
 
       } catch (phonepeError) {
+        await session.abortTransaction();
         console.error('Error checking PhonePe status:', phonepeError);
         return res.status(200).json({
           success: false,
@@ -865,6 +885,7 @@ exports.checkPaymentStatus = async (req, res) => {
     }
 
     // For non-PhonePe orders, return current status
+    await session.commitTransaction();
     return res.status(200).json({
       success: true,
       orderId: mainOrder._id,
@@ -873,13 +894,16 @@ exports.checkPaymentStatus = async (req, res) => {
     });
 
   } catch (error) {
+    await session.abortTransaction();
     console.error('Error in checkPaymentStatus:', error);
-    res.status(500).json({
+    res.status(500).json({ 
       success: false,
       message: "Error checking payment status",
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -1199,8 +1223,8 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
       line_items: lineItems,
       reference_number: `ORDER-${mainOrderId}`,
       notes: `Order for ${shippingAddress.firstName && shippingAddress.lastName
-          ? `${shippingAddress.firstName} ${shippingAddress.lastName}`
-          : "Customer"
+        ? `${shippingAddress.firstName} ${shippingAddress.lastName}`
+        : "Customer"
         }`,
     };
 
