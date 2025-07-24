@@ -45,9 +45,22 @@ const mainOrderSchema = new mongoose.Schema(
       default: null,
     },
     shippingAddress: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Address",
-      required: true,
+      ref: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Address"
+      },
+      details: {
+        firstName: String,
+        lastName: String,
+        phone: String,
+        addressLine1: String,
+        addressLine2: String,
+        city: String,
+        state: String,
+        zipCode: String,
+        country: String,
+        addressType: String
+      }
     },
     subOrders: [
       {
