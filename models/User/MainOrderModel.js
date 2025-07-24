@@ -1,5 +1,18 @@
 const mongoose = require("mongoose");
 
+const addressEmbeddedSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  phone: { type: String, required: true },
+  addressLine1: { type: String, required: true },
+  addressLine2: { type: String },
+  city: { type: String, required: true },
+  state: { type: String, required: true },
+  zipCode: { type: String, required: true },
+  country: { type: String, required: true },
+  addressType: { type: String, enum: ["Home", "Office", "Other"], default: "Home" }
+}, { _id: false }); 
+
 const mainOrderSchema = new mongoose.Schema(
   {
     user: {
@@ -45,22 +58,13 @@ const mainOrderSchema = new mongoose.Schema(
       default: null,
     },
     shippingAddress: {
-      ref: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Address"
-      },
-      details: {
-        firstName: String,
-        lastName: String,
-        phone: String,
-        addressLine1: String,
-        addressLine2: String,
-        city: String,
-        state: String,
-        zipCode: String,
-        country: String,
-        addressType: String
-      }
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Address",
+      required: true,
+    },
+    shippingAddressSnapshot: {
+      type: addressEmbeddedSchema,
+      required: true,
     },
     subOrders: [
       {

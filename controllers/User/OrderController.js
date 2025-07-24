@@ -55,26 +55,10 @@ exports.placeOrder = async (req, res) => {
     }
 
     // Validate shipping address
-     const shippingAddress = await Address.findById(shippingAddressId);
+    const shippingAddress = await Address.findById(shippingAddressId);
     if (!shippingAddress) {
       return res.status(400).json({ message: "Invalid shipping address" });
     }
-
-    const embeddedAddress = {
-      ref: shippingAddress._id,
-      details: {
-        firstName: shippingAddress.firstName,
-        lastName: shippingAddress.lastName,
-        phone: shippingAddress.phone,
-        addressLine1: shippingAddress.addressLine1,
-        addressLine2: shippingAddress.addressLine2,
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        zipCode: shippingAddress.zipCode,
-        country: shippingAddress.country,
-        addressType: shippingAddress.addressType
-      }
-    };
 
     // Validate payment method
     const validPaymentMethods = [
@@ -144,7 +128,7 @@ exports.placeOrder = async (req, res) => {
         platformFeeAmount,
         totalAmount,
         paymentMethod,
-         embeddedAddress,
+        shippingAddressId,
         vendorOrders
       );
 
@@ -152,7 +136,7 @@ exports.placeOrder = async (req, res) => {
       const shiprocketResponses = await createShiprocketShipments(
         createdOrders,
         mainOrder,
-        shippingAddress,
+        mainOrder.shippingAddressSnapshot,
         userId
       );
 
@@ -176,6 +160,19 @@ exports.placeOrder = async (req, res) => {
       const merchantTransactionId = `TXN_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const amountInPaisa = Math.round(totalAmount * 100); // Ensure integer
 
+       const shippingAddressSnapshot = {
+        firstName: shippingAddress.firstName,
+        lastName: shippingAddress.lastName,
+        phone: shippingAddress.phone,
+        addressLine1: shippingAddress.addressLine1,
+        addressLine2: shippingAddress.addressLine2,
+        city: shippingAddress.city,
+        state: shippingAddress.state,
+        zipCode: shippingAddress.zipCode,
+        country: shippingAddress.country,
+        addressType: shippingAddress.addressType,
+      };
+
       console.log("Creating PhonePe payment with:", {
         merchantTransactionId,
         amountInPaisa,
@@ -193,6 +190,7 @@ exports.placeOrder = async (req, res) => {
         paymentStatus: "Pending",
         orderStatus: "Pending",
         shippingAddress: shippingAddressId,
+         shippingAddressSnapshot,
         phonepeTransactionId: merchantTransactionId,
         merchantOrderId: merchantTransactionId, // Keep them same for consistency
         subOrders: [],
@@ -244,10 +242,10 @@ exports.placeOrder = async (req, res) => {
         });
       } catch (phonepeError) {
         console.error("PhonePe payment creation failed:", phonepeError);
-        
+
         // Clean up pending order if PhonePe fails
         await MainOrder.findByIdAndDelete(pendingOrder._id);
-        
+
         return res.status(500).json({
           message: "Failed to create PhonePe payment",
           error: phonepeError.message
@@ -282,11 +280,29 @@ async function createOrdersInDatabase(
   platformFeeAmount,
   totalAmount,
   paymentMethod,
-  shippingAddress,
+  shippingAddressId,
   vendorOrders,
   session = null
 ) {
   const options = session ? { session } : {};
+
+  const shippingAddress = await Address.findById(shippingAddressId);
+  if (!shippingAddress) {
+    throw new Error("Shipping address not found");
+  }
+
+  const shippingAddressSnapshot = {
+    firstName: shippingAddress.firstName,
+    lastName: shippingAddress.lastName,
+    phone: shippingAddress.phone,
+    addressLine1: shippingAddress.addressLine1,
+    addressLine2: shippingAddress.addressLine2,
+    city: shippingAddress.city,
+    state: shippingAddress.state,
+    zipCode: shippingAddress.zipCode,
+    country: shippingAddress.country,
+    addressType: shippingAddress.addressType,
+  };
 
   // Create Main Order
   const mainOrder = new MainOrder({
@@ -297,7 +313,8 @@ async function createOrdersInDatabase(
     paymentMethod,
     paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
     orderStatus: "Processing",
-     shippingAddress: shippingAddress,
+    shippingAddress: shippingAddressId,
+    shippingAddressSnapshot,
     subOrders: [],
   });
 
@@ -317,7 +334,8 @@ async function createOrdersInDatabase(
       paymentMethod,
       paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
       orderStatus: "Processing",
-      shippingAddress: shippingAddress,
+      shippingAddress: shippingAddressId,
+      shippingAddressSnapshot,
     });
 
     await newOrder.save(options);
@@ -411,9 +429,9 @@ exports.phonepeWebhook = async (req, res) => {
 
     // FIXED: Extract transaction details more safely
     const payload = callbackResponse.payload || callbackResponse;
-    const merchantTransactionId = payload.orderId?.toString() || 
-                                  payload.merchantTransactionId?.toString() ||
-                                  payload.merchantOrderId?.toString();
+    const merchantTransactionId = payload.orderId?.toString() ||
+      payload.merchantTransactionId?.toString() ||
+      payload.merchantOrderId?.toString();
     const state = payload.state;
     const transactionAmount = payload.amount ? payload.amount / 100 : 0;
 
@@ -434,13 +452,13 @@ exports.phonepeWebhook = async (req, res) => {
     }
 
     // FIXED: Find the pending order with better query
-   const pendingOrder = await MainOrder.findOne({
-  $or: [
-    { phonepeTransactionId: payload.merchantOrderId }, // This matches what you store
-    { merchantOrderId: payload.merchantOrderId }      // Secondary match
-  ],
-  isPendingPayment: true
-}).session(session);
+    const pendingOrder = await MainOrder.findOne({
+      $or: [
+        { phonepeTransactionId: payload.merchantOrderId }, // This matches what you store
+        { merchantOrderId: payload.merchantOrderId }      // Secondary match
+      ],
+      isPendingPayment: true
+    }).session(session);
 
     if (!pendingOrder) {
       console.error("Pending Order Not Found for transaction:", merchantTransactionId);
@@ -454,7 +472,7 @@ exports.phonepeWebhook = async (req, res) => {
       console.log("Recent pending orders:", recentOrders);
 
       await session.abortTransaction();
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: "Order not found",
         success: false,
         transactionId: merchantTransactionId
@@ -509,7 +527,7 @@ exports.phonepeWebhook = async (req, res) => {
 
       try {
         console.log("Creating orders in database...");
-        
+
         // Create the actual orders
         const { createdOrders } = await createOrdersInDatabase(
           pendingOrder.user,
@@ -667,7 +685,7 @@ exports.checkPaymentStatus = async (req, res) => {
 
     if (!mainOrder) {
       console.error('Order not found for:', { orderId, transactionId });
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: "Order not found",
         success: false
       });
@@ -695,16 +713,16 @@ exports.checkPaymentStatus = async (req, res) => {
         });
 
         // Handle completed payments where order wasn't created
-        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") && 
-            mainOrder.isPendingPayment) {
+        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") &&
+          mainOrder.isPendingPayment) {
           console.log('Payment completed but order pending - attempting to complete order');
-          
+
           try {
             // Parse cart data safely
             let vendorOrders;
             try {
-              const cartData = typeof mainOrder.pendingCartData === 'string' ? 
-                JSON.parse(mainOrder.pendingCartData) : 
+              const cartData = typeof mainOrder.pendingCartData === 'string' ?
+                JSON.parse(mainOrder.pendingCartData) :
                 mainOrder.pendingCartData;
               vendorOrders = cartData?.vendorOrders;
             } catch (parseError) {
@@ -797,7 +815,7 @@ exports.checkPaymentStatus = async (req, res) => {
 
           } catch (completionError) {
             console.error('Failed to complete order:', completionError);
-            
+
             // Mark as paid but with error status
             mainOrder.paymentStatus = "Paid";
             mainOrder.orderStatus = "Error - contact support";
@@ -815,8 +833,8 @@ exports.checkPaymentStatus = async (req, res) => {
         }
 
         // Handle failed payments
-        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") && 
-            mainOrder.paymentStatus !== "Failed") {
+        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
+          mainOrder.paymentStatus !== "Failed") {
           mainOrder.paymentStatus = "Failed";
           mainOrder.orderStatus = "Failed";
           await mainOrder.save();
@@ -856,7 +874,7 @@ exports.checkPaymentStatus = async (req, res) => {
 
   } catch (error) {
     console.error('Error in checkPaymentStatus:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Error checking payment status",
       error: error.message,
@@ -1030,18 +1048,16 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
         await user.save();
       } else {
         const customerData = {
-          contact_name: `${
-            shippingAddress?.firstName?.trim() || "Customer"
-          } (${Date.now()})`,
+          contact_name: `${shippingAddress?.firstName?.trim() || "Customer"
+            } (${Date.now()})`,
           company_name: user.company || shippingAddress.firstName,
           email: user.email,
           phone: shippingAddress.phone,
           contact_type: "customer",
           customer_sub_type: "business",
           billing_address: {
-            attention: `${shippingAddress?.firstName?.trim() || ""} ${
-              shippingAddress?.lastName?.trim() || ""
-            }`.trim(),
+            attention: `${shippingAddress?.firstName?.trim() || ""} ${shippingAddress?.lastName?.trim() || ""
+              }`.trim(),
             address: shippingAddress.addressLine1 || "Default Address",
             address_line2: shippingAddress.addressLine2 || "",
             city: shippingAddress.city,
@@ -1057,9 +1073,8 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
           user.zohoCustomerId = customerId;
           await user.save();
         } catch (customerError) {
-          customerData.contact_name = `${
-            shippingAddress.firstName?.trim() || "Customer"
-          } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
+          customerData.contact_name = `${shippingAddress.firstName?.trim() || "Customer"
+            } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
 
           const retryCustomer = await createCustomer(customerData);
           customerId = retryCustomer.contact_id;
@@ -1084,9 +1099,8 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
             item.product.zohoItemId = newProduct.item_id;
             await item.product.save();
           } catch (productError) {
-            productData.name = `${
-              item.product.name
-            } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
+            productData.name = `${item.product.name
+              } (${Date.now()}-${Math.floor(Math.random() * 1000)})`;
             const retryProduct = await createProductInZoho(productData);
             item.product.zohoItemId = retryProduct.item_id;
             await item.product.save();
@@ -1128,8 +1142,8 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
           platformFee.feeType === "fixed"
             ? platformFee.amount
             : (orders.reduce((sum, order) => sum + order.totalAmount, 0) *
-                platformFee.amount) /
-              100,
+              platformFee.amount) /
+            100,
         tax_id: getTaxId("intra-state"), // Assuming platform fee is always intra-state
       });
     }
@@ -1184,11 +1198,10 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
       currency_id: orders[0].currencyId || 982000000000190,
       line_items: lineItems,
       reference_number: `ORDER-${mainOrderId}`,
-      notes: `Order for ${
-        shippingAddress.firstName && shippingAddress.lastName
+      notes: `Order for ${shippingAddress.firstName && shippingAddress.lastName
           ? `${shippingAddress.firstName} ${shippingAddress.lastName}`
           : "Customer"
-      }`,
+        }`,
     };
 
     const invoiceResponse = await createInvoice(invoiceData);
@@ -1350,15 +1363,13 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
         .text(`${order.shippingAddress.addressLine1 || ""}`, 50, 240)
         .text(`${order.shippingAddress.addressLine2 || ""}`, 50, 255)
         .text(
-          `${order.shippingAddress.city || ""}, ${
-            order.shippingAddress.state || ""
+          `${order.shippingAddress.city || ""}, ${order.shippingAddress.state || ""
           }`,
           50,
           270
         )
         .text(
-          `${order.shippingAddress.country || ""} - ${
-            order.shippingAddress.zipCode || ""
+          `${order.shippingAddress.country || ""} - ${order.shippingAddress.zipCode || ""
           }`,
           50,
           285
@@ -1409,10 +1420,10 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
                 i === 0 || i === 3
                   ? "center"
                   : i === 1
-                  ? "left"
-                  : i === 4
-                  ? "right"
-                  : "center",
+                    ? "left"
+                    : i === 4
+                      ? "right"
+                      : "center",
             }
           );
       });
@@ -1453,10 +1464,10 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
                 i === 0 || i === 3
                   ? "center"
                   : i === 1
-                  ? "left"
-                  : i === 4
-                  ? "right"
-                  : "center",
+                    ? "left"
+                    : i === 4
+                      ? "right"
+                      : "center",
             }
           );
         });
@@ -1674,10 +1685,10 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
                 i === 0 || i === 3
                   ? "center"
                   : i === 1
-                  ? "left"
-                  : i === 4
-                  ? "right"
-                  : "center",
+                    ? "left"
+                    : i === 4
+                      ? "right"
+                      : "center",
             }
           );
       });
@@ -1734,10 +1745,10 @@ exports.generateInvoiceForMainOrder = async (req, res) => {
               i === 0 || i === 3
                 ? "center"
                 : i === 1
-                ? "left"
-                : i === 4
-                ? "right"
-                : "center",
+                  ? "left"
+                  : i === 4
+                    ? "right"
+                    : "center",
           }
         );
       });
