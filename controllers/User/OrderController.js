@@ -120,7 +120,6 @@ exports.placeOrder = async (req, res) => {
 
     // Handle different payment methods
     if (paymentMethod === "COD") {
-      // For COD, create order immediately since payment is guaranteed
       const { mainOrder, createdOrders } = await createOrdersInDatabase(
         userId,
         subtotal,
@@ -135,7 +134,7 @@ exports.placeOrder = async (req, res) => {
       const shiprocketResponses = await createShiprocketShipments(
         createdOrders,
         mainOrder,
-        mainOrder.shippingAddressSnapshot,
+        shippingAddress,
         userId
       );
 
