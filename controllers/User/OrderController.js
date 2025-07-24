@@ -119,41 +119,61 @@ exports.placeOrder = async (req, res) => {
     const totalAmount = subtotal + platformFeeAmount;
 
     // Handle different payment methods
-    if (paymentMethod === "COD") {
-      const { mainOrder, createdOrders } = await createOrdersInDatabase(
-        userId,
-        subtotal,
-        platformFeeAmount,
-        totalAmount,
-        paymentMethod,
-        shippingAddressId,
-        vendorOrders
-      );
+    // In your placeOrder function, modify the COD section:
+if (paymentMethod === "COD") {
+  // For COD, create order immediately since payment is guaranteed
+  const { mainOrder, createdOrders } = await createOrdersInDatabase(
+    userId,
+    subtotal,
+    platformFeeAmount,
+    totalAmount,
+    paymentMethod,
+    shippingAddressId,
+    vendorOrders
+  );
 
-      // Create Shiprocket shipments
-      const shiprocketResponses = await createShiprocketShipments(
-        createdOrders,
-        mainOrder,
-        shippingAddress,
-        userId
-      );
+  try {
+    // Create Shiprocket shipments
+    const shiprocketResponses = await createShiprocketShipments(
+      createdOrders,
+      mainOrder,
+      shippingAddress, // Pass the full address object, not just snapshot
+      userId
+    );
 
-      // Clear cart
-      await Cart.findOneAndUpdate(
-        { user: userId },
-        { items: [], totalPrice: 0, coupon: null }
-      );
+    // Clear cart
+    await Cart.findOneAndUpdate(
+      { user: userId },
+      { items: [], totalPrice: 0, coupon: null }
+    );
 
-      return res.status(201).json({
-        message: "Order placed successfully with Cash on Delivery",
-        mainOrderId: mainOrder._id,
-        orders: createdOrders,
-        subtotal,
-        platformFee: platformFeeAmount,
-        totalAmount,
-        shiprocketResponses,
-      });
-    } else if (paymentMethod === "PhonePe") {
+    return res.status(201).json({
+      message: "Order placed successfully with Cash on Delivery",
+      mainOrderId: mainOrder._id,
+      orders: createdOrders,
+      subtotal,
+      platformFee: platformFeeAmount,
+      totalAmount,
+      shiprocketResponses,
+    });
+  } catch (shiprocketError) {
+    console.error("Shiprocket Error:", shiprocketError);
+    
+    // Update order status to reflect shipment creation failure
+    mainOrder.orderStatus = "Processing - Shipment Creation Failed";
+    await mainOrder.save();
+    
+    return res.status(201).json({
+      message: "Order placed but shipment creation failed. We'll contact you.",
+      mainOrderId: mainOrder._id,
+      orders: createdOrders,
+      subtotal,
+      platformFee: platformFeeAmount,
+      totalAmount,
+      warning: "Shipment creation failed - " + (shiprocketError.response?.data?.message || shiprocketError.message)
+    });
+  }
+} else if (paymentMethod === "PhonePe") {
 
       const merchantTransactionId = `TXN_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const amountInPaisa = Math.round(totalAmount * 100); // Ensure integer
