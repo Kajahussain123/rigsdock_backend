@@ -3,8 +3,6 @@ const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const { trackShipment } = require('../../../controllers/Shiprocket/ShipRocketController');
 
 
-
-
 exports.getAllOrders = async (req, res) => {
     try {
         const orders = await Order.find().populate('user').populate({
@@ -19,12 +17,12 @@ exports.getAllOrders = async (req, res) => {
             return res.status(404).json({ message: "no orders found" });
         }
 
-        const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
+        const platformFeeData = await PlatformFee.findOne() .sort({ createdAt: -1 }) .sort({ createdAt: -1 });
         const platformFee = platformFeeData?.amount || 0;
 
-        // Calculate commission and other details for each order
+        
         const ordersWithCalculations = orders.map(order => {
-            // Calculate commission for each item
+            
             const itemsWithCommission = order.items.map(item => {
                 const product = item.product;
                 // Default commission percentage to 0 if category is missing

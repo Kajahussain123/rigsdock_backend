@@ -55,10 +55,26 @@ exports.placeOrder = async (req, res) => {
     }
 
     // Validate shipping address
-    const shippingAddress = await Address.findById(shippingAddressId);
+     const shippingAddress = await Address.findById(shippingAddressId);
     if (!shippingAddress) {
       return res.status(400).json({ message: "Invalid shipping address" });
     }
+
+    const embeddedAddress = {
+      ref: shippingAddress._id,
+      details: {
+        firstName: shippingAddress.firstName,
+        lastName: shippingAddress.lastName,
+        phone: shippingAddress.phone,
+        addressLine1: shippingAddress.addressLine1,
+        addressLine2: shippingAddress.addressLine2,
+        city: shippingAddress.city,
+        state: shippingAddress.state,
+        zipCode: shippingAddress.zipCode,
+        country: shippingAddress.country,
+        addressType: shippingAddress.addressType
+      }
+    };
 
     // Validate payment method
     const validPaymentMethods = [
@@ -128,7 +144,7 @@ exports.placeOrder = async (req, res) => {
         platformFeeAmount,
         totalAmount,
         paymentMethod,
-        shippingAddressId,
+         embeddedAddress,
         vendorOrders
       );
 
@@ -266,7 +282,7 @@ async function createOrdersInDatabase(
   platformFeeAmount,
   totalAmount,
   paymentMethod,
-  shippingAddressId,
+  shippingAddress,
   vendorOrders,
   session = null
 ) {
@@ -281,7 +297,7 @@ async function createOrdersInDatabase(
     paymentMethod,
     paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
     orderStatus: "Processing",
-    shippingAddress: shippingAddressId,
+     shippingAddress: shippingAddress,
     subOrders: [],
   });
 
@@ -301,7 +317,7 @@ async function createOrdersInDatabase(
       paymentMethod,
       paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
       orderStatus: "Processing",
-      shippingAddress: shippingAddressId,
+      shippingAddress: shippingAddress,
     });
 
     await newOrder.save(options);
