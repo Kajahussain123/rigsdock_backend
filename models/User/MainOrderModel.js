@@ -13,6 +13,8 @@ const addressEmbeddedSchema = new mongoose.Schema({
   addressType: { type: String, enum: ["Home", "Office", "Other"], default: "Home" }
 }, { _id: false }); 
 
+
+
 const mainOrderSchema = new mongoose.Schema(
   {
     user: {

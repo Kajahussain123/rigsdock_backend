@@ -151,7 +151,7 @@ app.use('/api/admin/deal', DealRouter);
 app.use('/api/admin/order', adminOrder);
 app.use('/api/admin/invoice', adminInvoice);
 app.use('/api/admin/user', adminUser);
-app.use('/api/admin/platform', platFormFee);  // ✅ Added from 'kaja' branch
+app.use('/api/admin/platform', platFormFee);  
 app.use('/api/admin/dashboard', adminDashboard);
 app.use('/api/admin/financial', adminFinancial);
 app.use('/api/admin/vendorpayout', adminVendorpayout);

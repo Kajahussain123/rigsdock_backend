@@ -11,7 +11,7 @@ const addressEmbeddedSchema = new mongoose.Schema({
   zipCode: { type: String, required: true },
   country: { type: String, required: true },
   addressType: { type: String, enum: ["Home", "Office", "Other"], default: "Home" }
-}, { _id: false }); 
+}, { _id: false });
 
 const orderSchema = new mongoose.Schema(
   {
@@ -81,10 +81,10 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Paid", "Failed", "Processing"], 
+      enum: ["Pending", "Paid", "Failed", "Processing"],
       default: "Pending",
-  },
-  phonepeTransactionId : {
+    },
+    phonepeTransactionId: {
       type: String, // Stores the Cashfree transaction ID
       default: null,
     },
@@ -94,8 +94,15 @@ const orderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["Processing","Pending", "Shipped", "Delivered", "Cancelled"],
+      enum: ["Processing", "Pending", "Shipped", "Delivered", "Cancelled"],
       default: "Processing",
+    },
+    cancellationReason: {
+      type: String,
+      default: ''
+    },
+    cancelledAt: {
+      type: Date
     },
     shippingAddress: {
       type: mongoose.Schema.Types.ObjectId,
@@ -109,7 +116,7 @@ const orderSchema = new mongoose.Schema(
     settled: {
       type: Boolean,
       default: false
-    },   
+    },
     shiprocketOrderId: { type: String },
     shiprocketShipmentId: { type: String },
     trackingNumber: { type: String },
