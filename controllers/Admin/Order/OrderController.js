@@ -5,7 +5,7 @@ const { trackShipment } = require('../../../controllers/Shiprocket/ShipRocketCon
 
 exports.getAllOrders = async (req, res) => {
     try {
-        const orders = await Order.find().populate('user').populate({
+        const orders = await Order.find().sort({createdAt: -1 }).populate('user').populate({
             path: 'items.product',
             populate: [
                 { path: 'owner', model: 'Vendor' },
