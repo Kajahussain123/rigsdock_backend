@@ -136,13 +136,13 @@ exports.getProductBySubcategory = async (req, res) => {
 exports.updateProductStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, rejectionReason } = req.body;
+    const { status } = req.body;
 
     // Check if user is admin
     if (req.user.role !== 'Admin') {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        message: 'Access denied. Admin privileges required.' 
+        message: 'Access denied. Admin privileges required.'
       });
     }
 
@@ -151,14 +151,6 @@ exports.updateProductStatus = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Invalid status. Must be approved, rejected, or pending.'
-      });
-    }
-
-    // If rejecting, rejection reason is required
-    if (status === 'rejected' && (!rejectionReason || rejectionReason.trim().length === 0)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rejection reason is required when rejecting a product.'
       });
     }
 
@@ -180,13 +172,11 @@ exports.updateProductStatus = async (req, res) => {
     if (status === 'approved') {
       updateData.approvedBy = req.user.id;
       updateData.approvedAt = new Date();
-      updateData.rejectionReason = null;
       updateData.rejectedAt = null;
     }
 
     // Handle rejection
     if (status === 'rejected') {
-      updateData.rejectionReason = rejectionReason.trim();
       updateData.rejectedAt = new Date();
       updateData.approvedBy = null;
       updateData.approvedAt = null;
@@ -196,7 +186,6 @@ exports.updateProductStatus = async (req, res) => {
     if (status === 'pending') {
       updateData.approvedBy = null;
       updateData.approvedAt = null;
-      updateData.rejectionReason = null;
       updateData.rejectedAt = null;
     }
 
@@ -205,10 +194,11 @@ exports.updateProductStatus = async (req, res) => {
       id,
       { $set: updateData },
       { new: true, runValidators: true }
-    ).populate('owner', 'name email')
-     .populate('maincategory')
-     .populate('category')
-     .populate('subcategory');
+    )
+      .populate('owner', 'name email')
+      .populate('maincategory')
+      .populate('category')
+      .populate('subcategory');
 
     // Generate response message
     let message;
@@ -234,7 +224,7 @@ exports.updateProductStatus = async (req, res) => {
 
   } catch (error) {
     console.error('Error updating product status:', error);
-    
+
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
@@ -249,6 +239,7 @@ exports.updateProductStatus = async (req, res) => {
     });
   }
 };
+
 
 // Get all pending products for admin review
 exports.getPendingProducts = async (req, res) => {
