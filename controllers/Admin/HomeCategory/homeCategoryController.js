@@ -31,7 +31,7 @@ const createHomeCategory = async (req, res) => {
     const newHomeCategory = new HomeCategory({
       title,
       subtitle,
-      image: req.file.path // or req.file.filename depending on your multer config
+      image: req.file.filename  // or req.file.filename depending on your multer config
     });
 
     const savedCategory = await newHomeCategory.save();
