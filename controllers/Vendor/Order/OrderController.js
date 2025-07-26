@@ -23,6 +23,7 @@ exports.getAllOrders = async (req, res) => {
 
     // Find all orders that contain these products with proper error handling
     const orders = await Order.find({ "items.product": { $in: productIds } })
+    .sort({ createdAt: -1 })
       .populate("user", "name email")
       .populate({
         path: 'items.product',

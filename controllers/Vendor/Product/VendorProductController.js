@@ -78,10 +78,11 @@ exports.getProducts = async (req, res) => {
     
     // If user is not admin, only show approved products
     if (req.user.role !== 'Admin') {
-      query.status = 'approved';
+      
     }
 
     const products = await Product.find(query)
+       .sort({ createdAt: -1 })
       .populate('maincategory')
       .populate('category')
       .populate('subcategory');
