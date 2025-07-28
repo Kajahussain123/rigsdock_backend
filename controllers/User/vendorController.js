@@ -13,16 +13,16 @@ exports.createVendor = async (req, res) => {
             return res.status(409).json({ message: 'Vendor phone number already exists' });
         }
         // Check verification statuses from frontend
-        const { isGstVerified, isPanVerified, isBankVerified } = req.body;
-        if (req.body.gstNumber && !isGstVerified) {
-            return res.status(400).json({ message: 'GST number must be verified before proceeding' });
-        }
-        if (req.body.panNumber && !isPanVerified) {
-            return res.status(400).json({ message: 'PAN number must be verified before proceeding' });
-        }
-        if (req.body.accountNumber && !isBankVerified) {
-            return res.status(400).json({ message: 'Bank account must be verified before proceeding' });
-        }
+        // const { isGstVerified, isPanVerified, isBankVerified } = req.body;
+        // if (req.body.gstNumber && !isGstVerified) {
+        //     return res.status(400).json({ message: 'GST number must be verified before proceeding' });
+        // }
+        // if (req.body.panNumber && !isPanVerified) {
+        //     return res.status(400).json({ message: 'PAN number must be verified before proceeding' });
+        // }
+        // if (req.body.accountNumber && !isBankVerified) {
+        //     return res.status(400).json({ message: 'Bank account must be verified before proceeding' });
+        // }
         // File validations
         const images = req.files.images;
         const storeLogo = req.files.storelogo?.[0];
@@ -48,9 +48,9 @@ exports.createVendor = async (req, res) => {
             license: license.filename,
             passbookPhoto: passbookPhoto.filename,
             images: imagePaths,
-            isGstVerified: isGstVerified || false,
-            isPanVerified: isPanVerified || false,
-            isBankVerified: isBankVerified || false,
+            // isGstVerified: isGstVerified || false,
+            // isPanVerified: isPanVerified || false,
+            // isBankVerified: isBankVerified || false,
             status: "pending"
         });
         await newVendor.save();
