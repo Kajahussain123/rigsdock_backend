@@ -5,7 +5,7 @@ const mainCategorySchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
-      enum: ["PC Components", "PC Peripherals"],
+      enum: ["PC Components", "PC Peripherals","Courses","Used Products"],
       unique: true,
     },
     description: {
