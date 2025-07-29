@@ -5,7 +5,6 @@ const multer = require("multer");
 const path = require("path");
 
 
-// Register a complaint (only for delivered products)
 // Register a complaint (only for delivered products) and update order status to Returned
 exports.registerComplaint = async (req, res) => {
     try {

@@ -1,6 +1,7 @@
 const Order = require('../../../models/User/OrderModel');
 const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const { trackShipment } = require('../../../controllers/Shiprocket/ShipRocketController');
+const Complaint = require('../../../models/User/ComplaintModel');
 
 
 exports.getAllOrders = async (req, res) => {
@@ -104,24 +105,52 @@ exports.updateOrderStatus = async(req,res) => {
 }
 
 // get order by id
-exports.getOrderById = async(req,res) => {
-    try {
-        const { orderId } = req.params;
-        const order = await Order.findById(orderId).populate('user shippingAddress').populate({
-            path: 'items.product',
-            populate: {
-              path: 'owner',
-              model: 'Vendor'
-            }
-          })
-        if(!order) {
-            return res.status(404).json({ message: "order not found" });
+exports.getOrderById = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    // 1️⃣ Get the order with items + product + vendor
+    const order = await Order.findById(orderId)
+      .populate('user shippingAddress')
+      .populate({
+        path: 'items.product',
+        populate: {
+          path: 'owner',
+          model: 'Vendor'
         }
-        res.status(200).json(order);
-    } catch (error) {
-        res.status(500).json({ message: 'Error fetch order', error:error.message })
+      });
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
     }
-}
+
+    // 2️⃣ Get complaints for this order
+    const complaints = await Complaint.find({ order: orderId });
+
+    // 3️⃣ Attach complaints to their matching product in items
+    const itemsWithComplaints = order.items.map(item => {
+      const itemComplaints = complaints.filter(
+        complaint => complaint.product.toString() === item.product._id.toString()
+      );
+      return {
+        ...item.toObject(),
+        complaints: itemComplaints // will be empty array if none
+      };
+    });
+
+    // 4️⃣ Replace items with enriched version
+    const orderWithComplaints = {
+      ...order.toObject(),
+      items: itemsWithComplaints
+    };
+
+    res.status(200).json(orderWithComplaints);
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching order', error: error.message });
+  }
+};
+
 
 exports.trackOrder = async(req,res) => {
     try {
