@@ -47,7 +47,7 @@ const mainOrderSchema = new mongoose.Schema(
     },
     orderStatus: {
       type: String,
-      enum: ["Processing", "Pending", "Shipped", "Delivered", "Cancelled", "Failed"], // Added "Failed"
+      enum: ["Processing", "Pending", "Shipped", "Delivered", "Cancelled", "Failed" ,"Returned"], // Added "Failed"
       default: "Processing",
     },
     phonepeTransactionId: {
