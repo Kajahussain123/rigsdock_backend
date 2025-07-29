@@ -3,12 +3,12 @@ const SubCategory = require("../../../models/admin/SubCategoryModel");
 
 //create a new subcategory
 exports.createSubCategory = async (req, res) => {
-  const { name, description,category,status } = req.body;
+  const { name,category,status } = req.body;
   try {
     if(!category){
       return res.status(400).json({ message: 'category is required' })
     }
-    const newSubCategory = new SubCategory({ name, description,category,status });
+    const newSubCategory = new SubCategory({ name,category,status });
     await newSubCategory.save();
     res
       .status(201)
@@ -86,7 +86,7 @@ exports.getSubCategoryByCategory = async(req,res) => {
 exports.updateSubCategory = async (req, res) => {
   const { id } = req.params;
   // const { name,description,category } = req.body;
-  const { name, description, status, category } = req.body;
+  const { name, status, category } = req.body;
 
   try {
     const subCategory = await SubCategory.findById(id);

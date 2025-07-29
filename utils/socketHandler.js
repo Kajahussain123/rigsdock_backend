@@ -3,7 +3,7 @@ const Chat = require('../models/admin/chatModel');
 // Socket.io connection
 module.exports = (io) => {
     io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log('A useR connected:', socket.id);
 
     // Join a room based on user type and ID
     socket.on('joinRoom', (data) => {

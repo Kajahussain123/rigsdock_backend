@@ -5,8 +5,9 @@ const Review = require("../../models/User/ReviesModel");
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find()
-      .populate("maincategory category subcategory brand")
-      .lean(); // Convert Mongoose documents to plain objects
+      .populate("maincategory category subcategory")
+      .populate({ path: "brand", select: "name" })
+      .lean(); 
 
     if (products.length === 0) {
       return res.status(400).json({ message: "No products found" });
