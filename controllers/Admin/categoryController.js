@@ -4,7 +4,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 
 exports.createCategory = async (req, res) => {
-    const { name, description, status, maincategory, commissionPercentage } = req.body;
+    const { name, status, maincategory, commissionPercentage } = req.body;
 
     if (!req.file) {
         return res.status(400).json({ message: 'Category image is required' });
@@ -14,7 +14,6 @@ exports.createCategory = async (req, res) => {
         const newCategory = new Category({
             name,
             image: req.file.filename,
-            description,
             maincategory,
             status: status || 'active',
             commissionPercentage: commissionPercentage || 0,
@@ -73,7 +72,7 @@ exports.getCategoryById = async (req, res) => {
 // 🚀 Update category (Only description & status)
 exports.updateCategory = async (req, res) => {
     const { id } = req.params;
-    const { description, status, commissionPercentage } = req.body;
+    const {  status, commissionPercentage } = req.body;
 
     try {
         const category = await Category.findById(id);
@@ -81,7 +80,7 @@ exports.updateCategory = async (req, res) => {
             return res.status(404).json({ message: 'Category not found' });
         }
 
-        if (description !== undefined) category.description = description;
+       
         if (status !== undefined) category.status = status;
         if (commissionPercentage !== undefined) category.commissionPercentage = commissionPercentage;
 

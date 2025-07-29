@@ -8,9 +8,6 @@ const mainCategorySchema = new mongoose.Schema(
       enum: ["PC Components", "PC Peripherals","Courses","Used Products"],
       unique: true,
     },
-    description: {
-      type: String,
-    },
     image: {
       type:String
     },

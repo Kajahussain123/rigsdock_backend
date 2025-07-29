@@ -3,18 +3,18 @@ const MainCategory = require('../../../models/admin/MainCategoryModel');
 //create new maincategory
 exports.createMainCategory = async(req,res) => {
     try {
-        const { name,description } = req.body;
+        const { name } = req.body;
 
         if(!req.file){
             return res.status(400).json({ message: "Notification Image is required" })
         }
 
-        if(!name || !description){
-            return res.status(400).json({ message: 'name and description is required' })
+        if(!name ){
+            return res.status(400).json({ message: 'name  is required' })
         }
         const newMainCategory = new MainCategory({
             name,
-            description,
+          
             image: req.file.filename,
         });
         await newMainCategory.save();

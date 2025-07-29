@@ -13,7 +13,8 @@ const productSchema = new mongoose.Schema(
     },
     deliveryfee: { type: Number, default: 0 },
     stock: { type: Number, required: true, min: 0 },
-    brand: { type: String, required: true },
+    brand: { type: mongoose.Schema.Types.ObjectId, ref: "Brand" },
+
     maincategory: { type: mongoose.Schema.Types.ObjectId, ref: "MainCategory", required: true },
     category: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
     subcategory: { type: mongoose.Schema.Types.ObjectId, ref: "SubCategory" },
