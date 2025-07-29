@@ -6,64 +6,61 @@ const path = require("path");
 
 
 // Register a complaint (only for delivered products)
+// Register a complaint (only for delivered products) and update order status to Returned
 exports.registerComplaint = async (req, res) => {
-  try {
-    const { userId, orderId, productId, complaintType, description } = req.body;
+    try {
+        const { userId, orderId, productId, complaintType, description } = req.body;
 
-    const imagePaths = req.files ? req.files.map((file) => file.filename) : [];
+        // Ensure req.files is not undefined before mapping
+        const imagePaths = req.files ? req.files.map((file) => file.filename) : [];
 
-    // Find the order with the product and make sure it's delivered
-    const order = await Order.findOne({
-      _id: orderId,
-      user: userId,
-      orderStatus: "Delivered",
-      "items.product": productId
-    });
+        // Check if the order exists and is delivered
+        const order = await Order.findOne({
+            _id: orderId,
+            user: userId,
+            orderStatus: "Delivered",
+            "items.product": productId
+        });
 
-    if (!order) {
-      return res.status(400).json({ message: "You can only register a complaint for delivered products." });
-    }
-
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(400).json({ message: "Product not found" });
-    }
-
-    // Create a new complaint
-    const newComplaint = new Complaint({
-      user: userId,
-      order: orderId,
-      product: productId,
-      complaintType,
-      description,
-      images: imagePaths
-    });
-
-    await newComplaint.save();
-
-    // ✅ If complaint type is 'Return', update the item's status to 'Returned'
-    if (complaintType.toLowerCase() === "return") {
-      const updatedItems = order.items.map(item => {
-        if (item.product.toString() === productId) {
-          return { ...item.toObject(), status: "Returned" };
+        if (!order) {
+            return res.status(400).json({ message: "You can only register a complaint for delivered products." });
         }
-        return item;
-      });
 
-      order.items = updatedItems;
-      await order.save();
+        // Validate if the product exists in the order
+        const product = await Product.findById(productId);
+        if (!product) {
+            return res.status(400).json({ message: "Product not found" });
+        }
+
+        // Create a new complaint
+        const newComplaint = new Complaint({
+            user: userId,
+            order: orderId,
+            product: productId,
+            complaintType,
+            description,
+            images: imagePaths // Store filenames if images are uploaded
+        });
+
+        await newComplaint.save();
+
+        // Update the order status to "Returned"
+        await Order.findByIdAndUpdate(
+            orderId,
+            { 
+                orderStatus: "Returned",
+                // You might want to add additional fields like:
+                returnedAt: new Date(),
+                returnReason: description // or create a separate field for return reason
+            },
+            { new: true }
+        );
+
+        res.status(201).json({ message: "Complaint registered successfully and order marked as Returned", complaint: newComplaint });
+    } catch (error) {
+        res.status(500).json({ message: "Error registering complaint", error: error.message });
     }
-
-    res.status(201).json({
-      message: "Complaint registered successfully",
-      complaint: newComplaint
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: "Error registering complaint", error: error.message });
-  }
 };
-
 
 
 // Get all complaints for a user
