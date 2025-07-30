@@ -8,4 +8,6 @@ router.get("/get",verifyToken(['Vendor']),orderController.getAllOrders);
 
 router.get("/get/:orderId",verifyToken(['Vendor']),orderController.getOrderById);
 
+router.get("/:orderId/invoice", verifyToken(['Vendor']), orderController.generateVendorInvoice);
+
 module.exports = router;
