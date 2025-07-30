@@ -988,7 +988,6 @@ exports.getUserOrders = async (req, res) => {
   }
 };
 
-// Get a single order by ID (GET method)
 exports.getOrderById = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -1044,7 +1043,6 @@ exports.getOrderById = async (req, res) => {
   }
 };
 
-// Update order status (PATCH method)
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { orderId } = req.params;
