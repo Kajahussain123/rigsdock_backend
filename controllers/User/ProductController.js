@@ -78,6 +78,7 @@ exports.getProductById = async (req, res) => {
     // Find the product and populate related fields
     const product = await Product.findOne({ _id: id })
       .populate("maincategory category subcategory owner offer")
+      .populate({ path: "brand", select: "name" })
       .lean(); // Convert to a plain object
 
     if (!product) {
