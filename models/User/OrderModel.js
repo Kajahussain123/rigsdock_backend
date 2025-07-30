@@ -79,6 +79,14 @@ const orderSchema = new mongoose.Schema(
       enum: ["COD", "Credit Card", "Debit Card", "PhonePe", "Net Banking"],
       required: true,
     },
+    originalSubtotal: {  // NEW: Store original subtotal before discount
+      type: Number,
+      required: false,
+    },
+    appliedCoupon: {     // NEW: Store coupon details
+      code: String,
+      discountAmount: Number,
+    },
     paymentStatus: {
       type: String,
       enum: ["Pending", "Paid", "Failed", "Processing"],

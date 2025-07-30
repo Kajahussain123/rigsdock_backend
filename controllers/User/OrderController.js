@@ -82,7 +82,7 @@ exports.placeOrder = async (req, res) => {
 
     // Group items by vendor
     const vendorOrders = {};
-    let subtotal = 0;
+    let originalSubtotal = 0; // Calculate original subtotal for platform fee calculation
 
     cart.items.forEach((item) => {
       const vendorId = item.product.owner
@@ -104,18 +104,30 @@ exports.placeOrder = async (req, res) => {
       });
 
       vendorOrders[vendorId].totalPrice += item.price * item.quantity;
-      subtotal += item.price * item.quantity;
+      originalSubtotal += item.price * item.quantity;
     });
 
-    // Calculate platform fee
+    // Use cart's totalPrice which already includes coupon discount
+    const subtotal = cart.totalPrice;
+    
+    // Extract coupon information
+    const appliedCoupon = cart.coupon
+      ? {
+          code: cart.coupon.code,
+          discountAmount: cart.coupon.discountAmount,
+        }
+      : null;
+
+    // Calculate platform fee based on original subtotal (before discount)
+    // This ensures platform fee is calculated on the full amount
     let platformFeeAmount = 0;
     if (platformFee.feeType === "fixed") {
       platformFeeAmount = platformFee.amount;
     } else if (platformFee.feeType === "percentage") {
-      platformFeeAmount = (subtotal * platformFee.amount) / 100;
+      platformFeeAmount = (originalSubtotal * platformFee.amount) / 100;
     }
 
-    // Calculate total amount including platform fee
+    // Calculate total amount: discounted subtotal + platform fee
     const totalAmount = subtotal + platformFeeAmount;
 
     // Handle different payment methods
@@ -127,7 +139,8 @@ exports.placeOrder = async (req, res) => {
         totalAmount,
         paymentMethod,
         shippingAddressId,
-        vendorOrders
+        vendorOrders,
+        appliedCoupon // Pass coupon info to database function
       );
 
       // Create Shiprocket shipments
@@ -149,6 +162,8 @@ exports.placeOrder = async (req, res) => {
         mainOrderId: mainOrder._id,
         orders: createdOrders,
         subtotal,
+        originalSubtotal, // Include original subtotal for reference
+        appliedCoupon, // Include coupon details
         platformFee: platformFeeAmount,
         totalAmount,
         shiprocketResponses,
@@ -175,7 +190,8 @@ exports.placeOrder = async (req, res) => {
         merchantTransactionId,
         amountInPaisa,
         totalAmount,
-        userId
+        userId,
+        appliedCoupon
       });
 
       // Create pending order first to get the mainOrderId
@@ -190,14 +206,16 @@ exports.placeOrder = async (req, res) => {
         shippingAddress: shippingAddressId,
         shippingAddressSnapshot,
         phonepeTransactionId: merchantTransactionId,
-        merchantOrderId: merchantTransactionId, // Keep them same for consistency
+        merchantOrderId: merchantTransactionId,
         subOrders: [],
         isPendingPayment: true,
-        // Store cart data as JSON string
+        // Store cart data as JSON string including coupon info
         pendingCartData: JSON.stringify({
           vendorOrders,
           shippingAddressId,
-          userId // Add userId for safety
+          userId,
+          appliedCoupon, // Include coupon in pending data
+          originalSubtotal // Include original subtotal
         })
       });
 
@@ -205,10 +223,10 @@ exports.placeOrder = async (req, res) => {
 
       console.log("Pending order created:", {
         orderId: pendingOrder._id,
-        transactionId: merchantTransactionId
+        transactionId: merchantTransactionId,
+        appliedCoupon
       });
 
-      // FIXED: Use mainOrderId in redirect URL instead omlf transaction_id
       const redirectUrl = `${process.env.FRONTEND_URL}/payment-status?mainOrderId=${pendingOrder._id}`;
 
       const metaInfo = {
@@ -232,8 +250,10 @@ exports.placeOrder = async (req, res) => {
           message: "Proceed to PhonePe Payment",
           paymentUrl: phonepeResponse.redirectUrl,
           pendingOrderId: pendingOrder._id,
-          mainOrderId: pendingOrder._id, // Added for consistency
+          mainOrderId: pendingOrder._id,
           subtotal,
+          originalSubtotal, // Include original subtotal
+          appliedCoupon, // Include coupon details
           platformFee: platformFeeAmount,
           totalAmount,
           phonepeTransactionId: merchantTransactionId,
@@ -271,6 +291,7 @@ exports.placeOrder = async (req, res) => {
   }
 };
 
+// Example of how to update your createOrdersInDatabase function
 async function createOrdersInDatabase(
   userId,
   subtotal,
@@ -279,71 +300,90 @@ async function createOrdersInDatabase(
   paymentMethod,
   shippingAddressId,
   vendorOrders,
-  session = null
+  appliedCoupon = null // New parameter for coupon
 ) {
-  const options = session ? { session } : {};
+  try {
+    // Get shipping address details
+    const shippingAddress = await Address.findById(shippingAddressId);
+    
+    const shippingAddressSnapshot = {
+      firstName: shippingAddress.firstName,
+      lastName: shippingAddress.lastName,
+      phone: shippingAddress.phone,
+      addressLine1: shippingAddress.addressLine1,
+      addressLine2: shippingAddress.addressLine2,
+      city: shippingAddress.city,
+      state: shippingAddress.state,
+      zipCode: shippingAddress.zipCode,
+      country: shippingAddress.country,
+      addressType: shippingAddress.addressType,
+    };
 
-  const shippingAddress = await Address.findById(shippingAddressId);
-  if (!shippingAddress) {
-    throw new Error("Shipping address not found");
-  }
+    // Calculate original subtotal if coupon was applied
+    let originalSubtotal = subtotal;
+    if (appliedCoupon && appliedCoupon.discountAmount) {
+      originalSubtotal = subtotal + appliedCoupon.discountAmount;
+    }
 
-  const shippingAddressSnapshot = {
-    firstName: shippingAddress.firstName,
-    lastName: shippingAddress.lastName,
-    phone: shippingAddress.phone,
-    addressLine1: shippingAddress.addressLine1,
-    addressLine2: shippingAddress.addressLine2,
-    city: shippingAddress.city,
-    state: shippingAddress.state,
-    zipCode: shippingAddress.zipCode,
-    country: shippingAddress.country,
-    addressType: shippingAddress.addressType,
-  };
-
-  // Create Main Order
-  const mainOrder = new MainOrder({
-    user: userId,
-    subtotal,
-    platformFee: platformFeeAmount,
-    totalAmount,
-    paymentMethod,
-    paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
-    orderStatus: "Processing",
-    shippingAddress: shippingAddressId,
-    shippingAddressSnapshot,
-    subOrders: [],
-  });
-
-  await mainOrder.save(options);
-
-  // Create vendor orders
-  const createdOrders = [];
-  for (const vendorId in vendorOrders) {
-    const orderData = vendorOrders[vendorId];
-
-    const newOrder = new Order({
-      mainOrderId: mainOrder._id,
+    // Create main order
+    const mainOrder = new MainOrder({
       user: userId,
-      vendor: vendorId,
-      items: orderData.items,
-      totalPrice: orderData.totalPrice,
+      subtotal,
+      originalSubtotal, // Store original subtotal
+      appliedCoupon,    // Store coupon details
+      platformFee: platformFeeAmount,
+      totalAmount,
       paymentMethod,
-      paymentStatus: paymentMethod === "COD" ? "Pending" : "Paid",
+      paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
       orderStatus: "Processing",
       shippingAddress: shippingAddressId,
       shippingAddressSnapshot,
+      subOrders: [],
     });
 
-    await newOrder.save(options);
-    createdOrders.push(newOrder._id);
+    await mainOrder.save();
+
+    // Create sub-orders for each vendor
+    const createdOrders = [];
+    
+    for (const vendorId in vendorOrders) {
+      const vendorOrder = vendorOrders[vendorId];
+      
+      // Calculate this vendor's share of the discount (proportional)
+      let vendorDiscount = 0;
+      if (appliedCoupon && appliedCoupon.discountAmount) {
+        const vendorOriginalTotal = vendorOrder.totalPrice;
+        const discountRatio = vendorOriginalTotal / originalSubtotal;
+        vendorDiscount = appliedCoupon.discountAmount * discountRatio;
+      }
+      
+      const order = new Order({
+        user: userId,
+        vendor: vendorId,
+        items: vendorOrder.items,
+        totalPrice: vendorOrder.totalPrice - vendorDiscount, // Apply proportional discount
+        originalTotalPrice: vendorOrder.totalPrice, // Store original price
+        appliedDiscount: vendorDiscount, // Store discount amount
+        paymentMethod,
+        paymentStatus: paymentMethod === "COD" ? "Pending" : "Pending",
+        orderStatus: "Processing",
+        shippingAddress: shippingAddressId,
+        shippingAddressSnapshot,
+        mainOrder: mainOrder._id,
+      });
+
+      await order.save();
+      createdOrders.push(order);
+      mainOrder.subOrders.push(order._id);
+    }
+
+    await mainOrder.save();
+
+    return { mainOrder, createdOrders };
+  } catch (error) {
+    console.error("Error creating orders in database:", error);
+    throw error;
   }
-
-  // Update Main Order with subOrders
-  mainOrder.subOrders = createdOrders;
-  await mainOrder.save(options);
-
-  return { mainOrder, createdOrders };
 }
 
 async function createShiprocketShipments(
