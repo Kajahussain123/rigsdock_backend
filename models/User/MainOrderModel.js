@@ -31,13 +31,9 @@ const mainOrderSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
-    originalSubtotal: {  // NEW: Store original subtotal before discount
+     couponDiscount: {
       type: Number,
-      required: false,
-    },
-    appliedCoupon: {     // NEW: Store coupon details
-      code: String,
-      discountAmount: Number,
+      default: 0
     },
     totalAmount: {
       type: Number,
