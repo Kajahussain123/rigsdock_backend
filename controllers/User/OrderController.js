@@ -913,31 +913,78 @@ exports.getUserOrders = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Fetch platform fee (assuming there's only one active fee)
-    const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 }); // Get latest fee
-    const platformFee = platformFeeData?.amount || 0; // Default to 0 if not found
+    // First get all main orders for this user to access coupon information
+    const mainOrders = await MainOrder.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .populate('shippingAddress');
 
-    // Fetch user orders
+    if (mainOrders.length === 0) {
+      return res.status(404).json({ message: "No orders found for this user" });
+    }
+
+    // Get all sub-orders for this user with proper population
     const orders = await Order.find({ user: userId })
-      .populate("items.product")
-      .populate("shippingAddress")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .populate('items.product')
+      .populate('shippingAddress')
+      .populate('vendor');
 
-    // Calculate final price for each order
-    const ordersWithPlatformFee = orders.map((order) => {
-      const finalTotal = order.totalPrice + platformFee; // Add platform fee to totalPrice
-      return {
-        ...order.toObject(), // Convert Mongoose document to plain object
-        platformFee,
-        finalTotalPrice: finalTotal,
+    // Create a map of mainOrderId to coupon information
+    const couponInfoMap = {};
+    mainOrders.forEach(mainOrder => {
+      couponInfoMap[mainOrder._id] = {
+        couponDiscount: mainOrder.couponDiscount || 0,
+        couponCode: mainOrder.couponCode || null,
+        subtotal: mainOrder.subtotal,
+        platformFee: mainOrder.platformFee,
+        totalAmount: mainOrder.totalAmount
       };
     });
 
-    res.status(200).json({ orders: ordersWithPlatformFee });
+    const ordersWithCalculations = orders.map(order => {
+      const mainOrderInfo = couponInfoMap[order.mainOrderId] || {};
+      const couponDiscount = mainOrderInfo.couponDiscount || 0;
+      const couponCode = mainOrderInfo.couponCode || null;
+      const mainOrderSubtotal = mainOrderInfo.subtotal || 0;
+      const platformFee = mainOrderInfo.platformFee || 0;
+
+      // Calculate the discount proportion for this order
+      const orderDiscountProportion = order.totalPrice / mainOrderSubtotal;
+      const orderDiscountAmount = couponDiscount * orderDiscountProportion;
+
+      // Calculate final total with platform fee proportion
+      const orderPlatformFeeProportion = platformFee * orderDiscountProportion;
+      const finalTotal = (order.totalPrice - orderDiscountAmount) + orderPlatformFeeProportion;
+
+      return {
+        ...order.toObject(),
+        couponDiscount: orderDiscountAmount,
+        couponCode,
+        platformFee: orderPlatformFeeProportion,
+        originalOrderTotal: order.totalPrice,
+        discountedOrderTotal: order.totalPrice - orderDiscountAmount,
+        finalTotalPrice: finalTotal,
+        mainOrderInfo: {
+          mainOrderId: order.mainOrderId,
+          mainOrderSubtotal,
+          mainOrderCouponDiscount: couponDiscount,
+          mainOrderPlatformFee: platformFee,
+          mainOrderTotal: mainOrderInfo.totalAmount
+        }
+      };
+    });
+
+    res.status(200).json({ 
+      message: "User orders fetched successfully",
+      total: orders.length,
+      orders: ordersWithCalculations
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching orders", error: error.message });
+    res.status(500).json({ 
+      message: 'Error fetching user orders', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
@@ -949,17 +996,51 @@ exports.getOrderById = async (req, res) => {
     const order = await Order.findById(orderId)
       .populate("items.product")
       .populate("shippingAddress")
-      .populate("user");
+      .populate("user")
+      .populate("vendor");
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
-    res.status(200).json({ order });
+    // Get the main order to access coupon information
+    const mainOrder = await MainOrder.findById(order.mainOrderId);
+    if (!mainOrder) {
+      return res.status(404).json({ message: "Main order not found" });
+    }
+
+    // Calculate the discount proportion for this order
+    const orderDiscountProportion = order.totalPrice / mainOrder.subtotal;
+    const orderDiscountAmount = mainOrder.couponDiscount * orderDiscountProportion;
+    const orderPlatformFee = mainOrder.platformFee * orderDiscountProportion;
+
+    const orderWithCalculations = {
+      ...order.toObject(),
+      couponDiscount: orderDiscountAmount,
+      couponCode: mainOrder.couponCode,
+      platformFee: orderPlatformFee,
+      originalOrderTotal: order.totalPrice,
+      discountedOrderTotal: order.totalPrice - orderDiscountAmount,
+      finalTotalPrice: (order.totalPrice - orderDiscountAmount) + orderPlatformFee,
+      mainOrderInfo: {
+        mainOrderId: mainOrder._id,
+        mainOrderSubtotal: mainOrder.subtotal,
+        mainOrderCouponDiscount: mainOrder.couponDiscount,
+        mainOrderPlatformFee: mainOrder.platformFee,
+        mainOrderTotal: mainOrder.totalAmount
+      }
+    };
+
+    res.status(200).json({ 
+      message: "Order fetched successfully",
+      order: orderWithCalculations
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching order", error: error.message });
+    res.status(500).json({ 
+      message: "Error fetching order", 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
