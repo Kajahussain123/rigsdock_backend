@@ -4,6 +4,7 @@ const path = require('path');
 const Order = require('../../../models/User/OrderModel')
 const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const cron = require('node-cron')
+const MainOrder = require('../../../models/User/OrderModel');
 
 const moment = require("moment");
 
@@ -73,13 +74,17 @@ exports.getVendorMonthlyReport = async (req, res) => {
 
     const orders = await Order.find(query)
       .populate("user")
-      .populate("shippingAddress") // <-- Add this line to populate the full address
+      .populate("shippingAddress")
       .populate({
         path: "items.product",
         populate: [
           { path: "owner", model: "Vendor" },
           { path: "category", model: "Category" },
         ],
+      })
+      .populate({
+        path: "mainOrderId",
+        select: "subtotal platformFee couponDiscount totalAmount"
       });
 
     if (!orders.length) {
@@ -117,7 +122,10 @@ exports.getVendorMonthlyReport = async (req, res) => {
 
       return {
         ...order.toObject(),
-        platformFee,
+        platformFee: order.mainOrderId?.platformFee || platformFee,
+        couponDiscount: order.mainOrderId?.couponDiscount || 0,
+        subtotal: order.mainOrderId?.subtotal || order.totalPrice,
+        totalAmount: order.mainOrderId?.totalAmount || order.totalPrice,
         totalCommission,
         totalVendorAmount,
         items: itemsWithCommission,
@@ -131,8 +139,6 @@ exports.getVendorMonthlyReport = async (req, res) => {
     };
 
     res.status(200).json(responseData);
-
-    // Return the data if the function is called programmatically
     return responseData;
   } catch (error) {
     res

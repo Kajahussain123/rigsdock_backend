@@ -114,7 +114,7 @@ exports.getAllOrders = async (req, res) => {
     }
 };
 
-// PUT /api/orders/:orderId/settlement
+// PUT 
 exports.updateOrderSettlement = async (req, res) => {
     const { orderId } = req.params;
     const { settled } = req.body;
@@ -132,10 +132,9 @@ exports.updateOrderSettlement = async (req, res) => {
     } catch (error) {
       res.status(500).json({ message: 'Failed to update settlement status', error: error.message });
     }
-  };
-  
+};
 
-// update orderstatus
+// update orderstatus 
 exports.updateOrderStatus = async(req,res) => {
     try {
         const { orderStatus } = req.body;
@@ -151,7 +150,7 @@ exports.updateOrderStatus = async(req,res) => {
     } catch (error) {
         res.status(500).json({ message: 'Error updating order status', error:error.message })
     }
-}
+};
 
 // get order by id
 exports.getOrderById = async (req, res) => {
@@ -244,7 +243,6 @@ exports.getOrderById = async (req, res) => {
         });
     }
 };
-
 
 exports.trackOrder = async(req,res) => {
     try {
