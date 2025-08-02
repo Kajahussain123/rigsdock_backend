@@ -17,7 +17,7 @@ const orderSchema = new mongoose.Schema(
   {
     mainOrderId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "MainOrder", // Reference to Main Order
+      ref: "MainOrder", 
       required: true,
     },
     user: {
@@ -93,11 +93,11 @@ const orderSchema = new mongoose.Schema(
       default: "Pending",
     },
     phonepeTransactionId: {
-      type: String, // Stores the Cashfree transaction ID
+      type: String, 
       default: null,
     },
     phonePeOrderId: {
-      type: String,  // Stores the Cashfree order ID reference
+      type: String,  
       default: null,
     },
     orderStatus: {

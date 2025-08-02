@@ -2,6 +2,7 @@ const Order = require('../../../models/User/OrderModel');
 const Product = require('../../../models/admin/ProductModel');
 const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const axios = require("axios");
+const MainOrder = require("../../../models/User/MainOrderModel")
 
 const {
   createInvoice,
@@ -21,67 +22,138 @@ exports.getAllOrders = async (req, res) => {
     const vendorProducts = await Product.find({ owner: req.user.id }).select("_id");
     const productIds = vendorProducts.map(product => product._id);
 
-    // Find all orders that contain these products with proper error handling
-    const orders = await Order.find({ "items.product": { $in: productIds } })
+    // Find all orders that contain these products with proper population
+    const orders = await Order.find({ 
+      "items.product": { $in: productIds }
+    })
     .sort({ createdAt: -1 })
-      .populate("user", "name email")
-      .populate({
-        path: 'items.product',
-        populate: {
-          path: 'owner',
-          model: 'Vendor'
-        }
-      })
-      .populate("shippingAddress");
+    .populate("user", "name email")
+    .populate({
+      path: 'items.product',
+      populate: [
+        { path: 'owner', model: 'Vendor' },
+        { path: 'category', model: 'Category' }
+      ]
+    })
+    .populate("shippingAddress");
 
-    const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
-    const platformFee = platformFeeData?.amount || 0;
+    if (orders.length === 0) {
+      return res.status(200).json({
+        message: "No orders found for your products",
+        total: 0,
+        orders: []
+      });
+    }
 
-    const processedOrders = orders
-      .map(order => {
-        // Filter items to include only vendor's products with null checks
-        const filteredItems = order.items.filter(item => 
-          item.product && 
-          item.product._id && 
-          productIds.some(id => id.equals(item.product._id))
-        );
+    // Get all unique mainOrderIds from the found orders
+    const mainOrderIds = [...new Set(orders.map(order => order.mainOrderId))];
 
-        // Calculate order totals
-        const itemsTotal = filteredItems.reduce(
-          (total, item) => total + (item.price * item.quantity), 0
-        );
-        const finalTotal = itemsTotal + platformFee;
+    // Find all related main orders
+    const mainOrders = await MainOrder.find({
+      _id: { $in: mainOrderIds }
+    });
+
+    // Create a map of mainOrderId to coupon information
+    const couponInfoMap = {};
+    mainOrders.forEach(mainOrder => {
+      couponInfoMap[mainOrder._id] = {
+        couponDiscount: mainOrder.couponDiscount || 0,
+        couponCode: mainOrder.couponCode || null,
+        subtotal: mainOrder.subtotal,
+        platformFee: mainOrder.platformFee,
+        totalAmount: mainOrder.totalAmount
+      };
+    });
+
+    const processedOrders = orders.map(order => {
+      // Filter items to include only vendor's products
+      const filteredItems = order.items.filter(item => 
+        item.product && item.product._id && 
+        productIds.some(id => id.equals(item.product._id))
+      );
+
+      // Get main order info
+      const mainOrderInfo = couponInfoMap[order.mainOrderId] || {};
+      const couponDiscount = mainOrderInfo.couponDiscount || 0;
+      const couponCode = mainOrderInfo.couponCode || null;
+      const mainOrderSubtotal = mainOrderInfo.subtotal || 0;
+      const platformFee = mainOrderInfo.platformFee || 0;
+
+      // Calculate the discount proportion for this order
+      const orderDiscountProportion = order.totalPrice / (mainOrderSubtotal || order.totalPrice);
+      const orderDiscountAmount = couponDiscount * orderDiscountProportion;
+      const orderPlatformFeeProportion = platformFee * orderDiscountProportion;
+
+      // Calculate items with commission details
+      const itemsWithCommission = filteredItems.map(item => {
+        const product = item.product;
+        const commissionPercentage = product?.category?.commissionPercentage || 0;
+        const itemPrice = item.price;
+        const commissionAmount = (itemPrice * commissionPercentage) / 100;
+        const vendorAmount = itemPrice - commissionAmount;
 
         return {
-          ...order.toObject(),
-          items: filteredItems,
-          itemsTotal,
-          platformFee,
-          finalTotalPrice: finalTotal
+          ...item.toObject(),
+          commissionPercentage,
+          commissionAmount,
+          vendorAmount
         };
-      })
-      // Remove orders with no items after filtering
-      .filter(order => order.items.length > 0);
+      });
+
+      // Calculate totals for the filtered items
+      const itemsTotal = filteredItems.reduce(
+        (total, item) => total + (item.price * item.quantity), 0
+      );
+      
+      const totalCommission = itemsWithCommission.reduce(
+        (sum, item) => sum + (item.commissionAmount * item.quantity), 0
+      );
+      
+      const totalVendorAmount = itemsWithCommission.reduce(
+        (sum, item) => sum + (item.vendorAmount * item.quantity), 0
+      );
+
+      const discountedTotal = itemsTotal - orderDiscountAmount;
+      const finalTotal = discountedTotal + orderPlatformFeeProportion;
+
+      return {
+        ...order.toObject(),
+        items: itemsWithCommission,
+        itemsTotal,
+        couponDiscount: orderDiscountAmount,
+        couponCode,
+        platformFee: orderPlatformFeeProportion,
+        discountedOrderTotal: discountedTotal,
+        finalTotalPrice: finalTotal,
+        totalCommission,
+        totalVendorAmount,
+        mainOrderInfo: {
+          mainOrderId: order.mainOrderId,
+          mainOrderSubtotal,
+          mainOrderCouponDiscount: couponDiscount,
+          mainOrderPlatformFee: platformFee,
+          mainOrderTotal: mainOrderInfo.totalAmount
+        }
+      };
+    }).filter(order => order.items.length > 0); // Remove empty orders
 
     res.status(200).json({
       message: "Orders fetched successfully",
       total: processedOrders.length,
-      platformFee,
       orders: processedOrders
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ 
       message: "An error occurred while fetching orders",
-      error: error.message 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
-}
+};
 
-// Get vendor order by ID
 exports.getOrderById = async (req, res) => {
   const { orderId } = req.params;
-
   try {
     const order = await Order.findById(orderId)
       .populate("user", "name email")
@@ -95,31 +167,101 @@ exports.getOrderById = async (req, res) => {
       .populate("shippingAddress");
 
     if (!order) {
-      return res.status(404).send({ error: "Order not found." });
+      return res.status(404).json({ message: "Order not found" });
     }
 
+    // Get the main order for coupon info
+    const mainOrder = await MainOrder.findById(order.mainOrderId);
+    if (!mainOrder) {
+      return res.status(404).json({ message: "Main order not found" });
+    }
+
+    // Get vendor's products
     const vendorProducts = await Product.find({ owner: req.user.id }).select("_id");
+    const productIds = vendorProducts.map(product => product._id);
 
-    const productIds = vendorProducts.map(product => product._id.toString());
+    // Filter items to include only vendor's products
+    const filteredItems = order.items.filter(item => 
+      item.product && item.product._id && 
+      productIds.some(id => id.equals(item.product._id))
+    );
 
-    order.items = order.items.filter(item => {
-      const itemProductId = item.product._id.toString();
-      return productIds.includes(itemProductId);
+    if (filteredItems.length === 0) {
+      return res.status(200).json({ 
+        message: "No items in this order belong to your products" 
+      });
+    }
+
+    // Calculate the discount proportion for this order
+    const orderDiscountProportion = order.totalPrice / mainOrder.subtotal;
+    const orderDiscountAmount = mainOrder.couponDiscount * orderDiscountProportion;
+    const orderPlatformFee = mainOrder.platformFee * orderDiscountProportion;
+
+    // Calculate items with commission details
+    const itemsWithDetails = filteredItems.map(item => {
+      const product = item.product;
+      const commissionPercentage = product?.category?.commissionPercentage || 0;
+      const itemPrice = item.price;
+      const commissionAmount = (itemPrice * commissionPercentage) / 100;
+      const vendorAmount = itemPrice - commissionAmount;
+
+      return {
+        ...item.toObject(),
+        commissionPercentage,
+        commissionAmount,
+        vendorAmount
+      };
     });
 
-    order.totalPrice = order.items.reduce((total, item) => total + item.price * item.quantity, 0);
+    // Calculate totals for the filtered items
+    const itemsTotal = filteredItems.reduce(
+      (total, item) => total + (item.price * item.quantity), 0
+    );
+    
+    const totalCommission = itemsWithDetails.reduce(
+      (sum, item) => sum + (item.commissionAmount * item.quantity), 0
+    );
+    
+    const totalVendorAmount = itemsWithDetails.reduce(
+      (sum, item) => sum + (item.vendorAmount * item.quantity), 0
+    );
 
-    if (order.items.length === 0) {
-      return res.status(200).send({ message: "No items in this order belong to the logged-in vendor." });
-    }
+    const discountedTotal = itemsTotal - orderDiscountAmount;
+    const finalTotal = discountedTotal + orderPlatformFee;
 
-    res.status(200).json(order);
+    const orderWithDetails = {
+      ...order.toObject(),
+      items: itemsWithDetails,
+      itemsTotal,
+      couponDiscount: orderDiscountAmount,
+      couponCode: mainOrder.couponCode,
+      platformFee: orderPlatformFee,
+      discountedOrderTotal: discountedTotal,
+      finalTotalPrice: finalTotal,
+      totalCommission,
+      totalVendorAmount,
+      mainOrderInfo: {
+        mainOrderId: mainOrder._id,
+        mainOrderSubtotal: mainOrder.subtotal,
+        mainOrderCouponDiscount: mainOrder.couponDiscount,
+        mainOrderPlatformFee: mainOrder.platformFee,
+        mainOrderTotal: mainOrder.totalAmount
+      }
+    };
+
+    res.status(200).json({
+      message: "Order fetched successfully",
+      order: orderWithDetails
+    });
   } catch (error) {
     console.error("Error fetching order:", error);
-    res.status(500).send({ error: "An error occurred while fetching the order." });
+    res.status(500).json({ 
+      message: "An error occurred while fetching the order",
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
-
 
 exports.updateOrderStatus = async (req, res) => {
   try {
