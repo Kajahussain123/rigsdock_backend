@@ -5,6 +5,7 @@ const Order = require('../../../models/User/OrderModel')
 const PlatformFee = require('../../../models/admin/PlatformFeeModel');
 const cron = require('node-cron')
 const MainOrder = require('../../../models/User/OrderModel');
+const Coupon = require('../../../models/admin/couponModel')
 
 const moment = require("moment");
 
@@ -84,7 +85,7 @@ exports.getVendorMonthlyReport = async (req, res) => {
       })
       .populate({
         path: "mainOrderId",
-        select: "subtotal platformFee couponDiscount totalAmount"
+        select: "subtotal platformFee couponDiscount totalAmount appliedCoupon"
       });
 
     if (!orders.length) {
@@ -95,6 +96,34 @@ exports.getVendorMonthlyReport = async (req, res) => {
 
     const platformFeeData = await PlatformFee.findOne().sort({ createdAt: -1 });
     const platformFee = platformFeeData?.amount || 0;
+
+    // Get all unique coupon codes from orders to fetch coupon details
+    const couponCodes = [...new Set(
+      orders
+        .map(order => order.mainOrderId?.appliedCoupon?.code || order.appliedCoupon?.code)
+        .filter(Boolean)
+    )];
+
+    // Fetch coupon details including owner information
+    const coupons = await Coupon.find({ 
+      couponCode: { $in: couponCodes } 
+    }).populate('ownerId', 'name businessname role');
+
+    // Create a map for quick coupon lookup
+    const couponMap = new Map();
+    coupons.forEach(coupon => {
+      couponMap.set(coupon.couponCode, {
+        _id: coupon._id,
+        name: coupon.name,
+        couponCode: coupon.couponCode,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        ownerType: coupon.ownerType,
+        ownerId: coupon.ownerId,
+        ownerName: coupon.ownerId?.name || coupon.ownerId?.businessname || 'Unknown',
+        createdBy: coupon.ownerType === 'Admin' ? 'Admin' : 'Vendor'
+      });
+    });
 
     const ordersWithStats = orders.map((order) => {
       const itemsWithCommission = order.items.map((item) => {
@@ -120,6 +149,10 @@ exports.getVendorMonthlyReport = async (req, res) => {
         0
       );
 
+      // Get coupon details if applied
+      const appliedCouponCode = order.mainOrderId?.appliedCoupon?.code || order.appliedCoupon?.code;
+      const couponDetails = appliedCouponCode ? couponMap.get(appliedCouponCode) : null;
+
       return {
         ...order.toObject(),
         platformFee: order.mainOrderId?.platformFee || platformFee,
@@ -129,12 +162,26 @@ exports.getVendorMonthlyReport = async (req, res) => {
         totalCommission,
         totalVendorAmount,
         items: itemsWithCommission,
+        // Enhanced coupon information
+        appliedCoupon: order.appliedCoupon || order.mainOrderId?.appliedCoupon || null,
+        couponDetails: couponDetails || null
       };
     });
+
+    // Calculate summary statistics
+    const totalCouponDiscount = ordersWithStats.reduce((sum, order) => sum + (order.couponDiscount || 0), 0);
+    const adminCouponsUsed = ordersWithStats.filter(order => order.couponDetails?.createdBy === 'Admin').length;
+    const vendorCouponsUsed = ordersWithStats.filter(order => order.couponDetails?.createdBy === 'Vendor').length;
 
     const responseData = {
       message: "Monthly vendor report generated",
       totalOrders: orders.length,
+      summary: {
+        totalCouponDiscount,
+        adminCouponsUsed,
+        vendorCouponsUsed,
+        totalCouponsUsed: adminCouponsUsed + vendorCouponsUsed
+      },
       report: ordersWithStats,
     };
 
