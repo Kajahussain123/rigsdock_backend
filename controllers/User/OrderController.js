@@ -49,7 +49,18 @@ exports.placeOrder = async (req, res) => {
     // Fetch user's cart with populated products and coupon info
     const cart = await Cart.findOne({ user: userId })
       .populate("items.product")
-      .populate("coupon.code"); // If you have a Coupon model
+      // .populate("coupon.code"); // If you have a Coupon model
+
+      if (cart.coupon) {
+  if (typeof cart.coupon === 'object' && cart.coupon.discountAmount) {
+    // If coupon is an object with discountAmount
+    couponDiscount = cart.coupon.discountAmount || 0;
+    couponCode = cart.coupon.code || cart.coupon.couponCode || null;
+  } else if (typeof cart.coupon === 'number') {
+    // If coupon is just a discount amount
+    couponDiscount = cart.coupon;
+  }
+}
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ message: "Cart is empty" });
@@ -336,6 +347,10 @@ async function createOrdersInDatabase(
       orderStatus: "Processing",
       shippingAddress: shippingAddressId,
       shippingAddressSnapshot,
+       appliedCoupon: couponCode ? {
+        code: couponCode,
+        discountAmount: couponDiscount * (orderData.totalPrice / subtotal) // Proportional discount
+      } : null,
     });
 
     await newOrder.save(options);

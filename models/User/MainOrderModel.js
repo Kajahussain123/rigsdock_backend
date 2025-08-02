@@ -35,6 +35,10 @@ const mainOrderSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+     couponCode: {
+      type: String,
+      default: null
+    },
     totalAmount: {
       type: Number,
       required: true,
@@ -55,7 +59,7 @@ const mainOrderSchema = new mongoose.Schema(
       default: "Processing",
     },
     phonepeTransactionId: {
-      type: String, // Keep as String - this is correct
+      type: String, 
       default: null,
       index: true, // Add index for faster queries
     },
