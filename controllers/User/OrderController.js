@@ -49,18 +49,9 @@ exports.placeOrder = async (req, res) => {
     // Fetch user's cart with populated products and coupon info
     const cart = await Cart.findOne({ user: userId })
       .populate("items.product")
-      // .populate("coupon.code"); // If you have a Coupon model
+    // .populate("coupon.code"); // If you have a Coupon model
 
-      if (cart.coupon) {
-  if (typeof cart.coupon === 'object' && cart.coupon.discountAmount) {
-    // If coupon is an object with discountAmount
-    couponDiscount = cart.coupon.discountAmount || 0;
-    couponCode = cart.coupon.code || cart.coupon.couponCode || null;
-  } else if (typeof cart.coupon === 'number') {
-    // If coupon is just a discount amount
-    couponDiscount = cart.coupon;
-  }
-}
+   
 
     if (!cart || cart.items.length === 0) {
       return res.status(400).json({ message: "Cart is empty" });
@@ -82,6 +73,24 @@ exports.placeOrder = async (req, res) => {
     ];
     if (!validPaymentMethods.includes(paymentMethod)) {
       return res.status(400).json({ message: "Invalid payment method" });
+    }
+
+    let couponDiscount = 0;
+    let couponCode = null;
+
+    // Extract coupon information from cart (handle different structures)
+    if (cart.coupon) {
+      console.log('Cart coupon data:', cart.coupon);
+      
+      if (typeof cart.coupon === 'object') {
+        // If coupon is an object
+        couponDiscount = cart.coupon.discountAmount || 0;
+        couponCode = cart.coupon.code || cart.coupon.couponCode || null;
+      } else if (typeof cart.coupon === 'number') {
+        // If coupon is just a discount amount
+        couponDiscount = cart.coupon;
+        couponCode = null; // No code available in this case
+      }
     }
 
     // Fetch platform fee
@@ -122,9 +131,9 @@ exports.placeOrder = async (req, res) => {
       subtotal += itemTotal;
     });
 
-    // Get coupon discount (default to 0 if no coupon)
-    const couponDiscount = cart.coupon?.discountAmount || 0;
-    const couponCode = cart.coupon?.code || null;
+    // // Get coupon discount (default to 0 if no coupon)
+    // const couponDiscount = cart.coupon?.discountAmount || 0;
+    // const couponCode = cart.coupon?.code || null;
 
     // Apply coupon discount to subtotal
     const discountedSubtotal = Math.max(0, subtotal - couponDiscount);
@@ -347,7 +356,7 @@ async function createOrdersInDatabase(
       orderStatus: "Processing",
       shippingAddress: shippingAddressId,
       shippingAddressSnapshot,
-       appliedCoupon: couponCode ? {
+      appliedCoupon: couponCode ? {
         code: couponCode,
         discountAmount: couponDiscount * (orderData.totalPrice / subtotal) // Proportional discount
       } : null,
@@ -442,9 +451,9 @@ exports.phonepeWebhook = async (req, res) => {
 
     // Extract transaction details safely
     const payload = callbackResponse.payload || callbackResponse;
-    const merchantTransactionId = payload.orderId?.toString() || 
-                                payload.merchantTransactionId?.toString() ||
-                                payload.merchantOrderId?.toString();
+    const merchantTransactionId = payload.orderId?.toString() ||
+      payload.merchantTransactionId?.toString() ||
+      payload.merchantOrderId?.toString();
     const state = payload.state;
     const transactionAmount = payload.amount ? payload.amount / 100 : 0;
 
@@ -475,7 +484,7 @@ exports.phonepeWebhook = async (req, res) => {
 
     if (!pendingOrder) {
       console.error("Pending Order Not Found for transaction:", merchantTransactionId);
-      
+
       // Debug logging
       const recentOrders = await MainOrder.find({
         isPendingPayment: true,
@@ -485,7 +494,7 @@ exports.phonepeWebhook = async (req, res) => {
       console.log("Recent pending orders:", recentOrders);
 
       await session.abortTransaction();
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: "Order not found",
         success: false,
         transactionId: merchantTransactionId
@@ -521,7 +530,7 @@ exports.phonepeWebhook = async (req, res) => {
           JSON.parse(pendingOrder.pendingCartData) :
           pendingOrder.pendingCartData;
         vendorOrders = cartData?.vendorOrders;
-        
+
         if (!vendorOrders) {
           throw new Error("Vendor orders not found in cart data");
         }
@@ -536,7 +545,7 @@ exports.phonepeWebhook = async (req, res) => {
 
       try {
         console.log("Creating orders in database...");
-        
+
         // Get shipping address details
         const shippingAddress = await Address.findById(pendingOrder.shippingAddress).session(session);
         if (!shippingAddress) {
@@ -713,7 +722,7 @@ exports.checkPaymentStatus = async (req, res) => {
     if (!mainOrder) {
       console.error('Order not found for:', { orderId, transactionId });
       await session.abortTransaction();
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: "Order not found",
         success: false
       });
@@ -741,19 +750,19 @@ exports.checkPaymentStatus = async (req, res) => {
         });
 
         // Handle completed payments where order wasn't created
-        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") && 
-            mainOrder.isPendingPayment) {
+        if ((phonepeStatus === "COMPLETED" || phonepeStatus === "PAID") &&
+          mainOrder.isPendingPayment) {
           console.log('Payment completed but order pending - attempting to complete order');
-          
+
           try {
             // Parse cart data safely
             let vendorOrders;
             try {
-              const cartData = typeof mainOrder.pendingCartData === 'string' ? 
-                JSON.parse(mainOrder.pendingCartData) : 
+              const cartData = typeof mainOrder.pendingCartData === 'string' ?
+                JSON.parse(mainOrder.pendingCartData) :
                 mainOrder.pendingCartData;
               vendorOrders = cartData?.vendorOrders;
-              
+
               if (!vendorOrders) {
                 throw new Error("Vendor orders not found in cart data");
               }
@@ -850,7 +859,7 @@ exports.checkPaymentStatus = async (req, res) => {
           } catch (completionError) {
             await session.abortTransaction();
             console.error('Failed to complete order:', completionError);
-            
+
             // Mark as paid but with error status
             mainOrder.paymentStatus = "Paid";
             mainOrder.orderStatus = "Error - contact support";
@@ -868,8 +877,8 @@ exports.checkPaymentStatus = async (req, res) => {
         }
 
         // Handle failed payments
-        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") && 
-            mainOrder.paymentStatus !== "Failed") {
+        if ((phonepeStatus === "FAILED" || phonepeStatus === "FAILURE") &&
+          mainOrder.paymentStatus !== "Failed") {
           mainOrder.paymentStatus = "Failed";
           mainOrder.orderStatus = "Failed";
           await mainOrder.save({ session });
@@ -913,7 +922,7 @@ exports.checkPaymentStatus = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error('Error in checkPaymentStatus:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Error checking payment status",
       error: error.message,
@@ -989,14 +998,14 @@ exports.getUserOrders = async (req, res) => {
       };
     });
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: "User orders fetched successfully",
       total: orders.length,
       orders: ordersWithCalculations
     });
   } catch (error) {
-    res.status(500).json({ 
-      message: 'Error fetching user orders', 
+    res.status(500).json({
+      message: 'Error fetching user orders',
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
@@ -1045,13 +1054,13 @@ exports.getOrderById = async (req, res) => {
       }
     };
 
-    res.status(200).json({ 
+    res.status(200).json({
       message: "Order fetched successfully",
       order: orderWithCalculations
     });
   } catch (error) {
-    res.status(500).json({ 
-      message: "Error fetching order", 
+    res.status(500).json({
+      message: "Error fetching order",
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
