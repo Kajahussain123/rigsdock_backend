@@ -12,7 +12,7 @@ origin: [
     'http://localhost:3002', 
     'https://rigsdock.com',
     'https://www.rigsdock.com',
-    'https://vermillion-beijinho-abb79a.netlify.app',
+    'https://admin-rigsdock.netlify.app',
   ],
   methods: ['GET','HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
