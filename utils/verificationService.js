@@ -150,4 +150,5 @@ async function verifyBankAccount(accountDetails) {
       };
     }
   }
+  
 module.exports = { verifyPAN, verifyBankAccount };

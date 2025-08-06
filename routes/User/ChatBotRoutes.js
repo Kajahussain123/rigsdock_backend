@@ -132,7 +132,7 @@ ${addressParts.join(', ')}`;
                             break;
                     }
 
-                    // Add thank you message to final order details
+                    
                     orderDetails += thankYouMessage;
 
                     await logChat(userId, message, orderDetails, attachments);
@@ -144,7 +144,7 @@ Sorry, no order found with ID: "${orderId}"
 
 Please check:
 • Order ID format
-• PhonePe Order ID if applicable
+
 
 For assistance, contact: +91-9778466748` + thankYouMessage;
                     await logChat(userId, message, notFoundReply, attachments);
@@ -160,50 +160,50 @@ Sorry, there was an error retrieving your order. Please try again or contact sup
             }
         }
 
-        // Handle return information collection (NEW LOGIC)
+       
         if (userSessions[userId]?.expectingReturnInfo) {
             if (!userSessions[userId].returnStep) {
-                // First step - expecting Order ID
+                
                 userSessions[userId].returnStep = 'order_id';
                 userSessions[userId].returnOrderId = message.trim();
                 
                 const reply = `📦 Return Request - Order ID Received
 
-Order ID: ${message.trim()}
+                Order ID: ${message.trim()}
 
-Now please provide the reason for return:
-• Defective product
-• Wrong item received
-• Size/fit issue
-• Changed mind
-• Other (please specify)`;
+                Now please provide the reason for return:
+                • Defective product
+                • Wrong item received
+                • Size/fit issue
+                • Changed mind
+                • Other (please specify)`;
                 
                 await logChat(userId, message, reply, attachments);
                 return reply;
                 
             } else if (userSessions[userId].returnStep === 'order_id') {
-                // Second step - reason provided, complete the return request
+              
                 const returnReason = message.trim();
                 const orderId = userSessions[userId].returnOrderId;
                 
                 const returnDetails = `✅ Return Request Submitted
 
-📋 Order ID: ${orderId}
-🔄 Reason: ${returnReason}
-📅 Request Date: ${new Date().toLocaleDateString()}
+                📋 Order ID: ${orderId}
+                🔄 Reason: ${returnReason}
+                📅 Request Date: ${new Date().toLocaleDateString()}
 
-Your return request has been submitted successfully!
+                Your return request has been submitted successfully!
 
-What happens next:
-1. Our team will review your request within 24 hours
-2. You'll receive return instructions via email/SMS
-3. Return pickup will be scheduled (if applicable)
-4. Refund will be processed after inspection
+                What happens next:
+                1. Our team will review your request within 24 hours
+                2. You'll receive return instructions via email/SMS
+                3. Return pickup will be scheduled (if applicable)
+                4. Refund will be processed after inspection
 
-For urgent queries: +91-9778466748
-📧 support@rigsdock.com` + thankYouMessage;
+                For urgent queries: +91-9778466748
+                📧 support@rigsdock.com` + thankYouMessage;
 
-                // Clear the session
+               
                 delete userSessions[userId];
                 
                 await logChat(userId, message, returnDetails, attachments);
@@ -211,7 +211,7 @@ For urgent queries: +91-9778466748
             }
         }
 
-        // Handle payment issues with screenshots (existing logic)
+       
         if (text.includes('payment issue') || text.includes('payment problem') || 
             (userSessions[userId]?.paymentIssue && (attachments.length > 0 || message.toLowerCase() !== 'skip'))) {
             
@@ -222,14 +222,13 @@ For urgent queries: +91-9778466748
                 };
                 const initialReply = `💳 Payment Issue Assistance
 
-Please provide:
-1. Your Order ID
-2. Payment method used (UPI, Card, etc.)
-3. Screenshot of payment/error (if available, or type 'skip')`;
+                Please provide:
+                1. Your Order ID
+                2. Screenshot of payment/error (if available, or type 'skip')`;
                 await logChat(userId, message, initialReply, attachments);
                 return initialReply;
             } else {
-                // Process payment issue information
+                
                 let paymentDetails = '';
                 
                 if (attachments.length > 0) {
@@ -242,7 +241,7 @@ Please provide:
                 
                 paymentDetails += `
 
-Our team will review your payment issue and respond within 24 hours. For immediate assistance, call +91-9778466748.` + thankYouMessage;
+                Our team will review your payment issue and respond within 24 hours. For immediate assistance, call +91-9778466748.` + thankYouMessage;
                 
                 delete userSessions[userId].paymentIssue;
                 delete userSessions[userId].expectingOrderId;
@@ -252,29 +251,29 @@ Our team will review your payment issue and respond within 24 hours. For immedia
             }
         }
 
-        // Handle order tracking
+        
         if (text.includes('order status') || text.includes('track order') || text.includes('my order')) {
             userSessions[userId] = { expectingOrderId: true };
             const reply = `🔍 Order Lookup
 
-Please provide your Order ID or PhonePe Order ID to check your order status.`;
+            Please provide your Order ID  to check your order status.`;
             await logChat(userId, message, reply, attachments);
             return reply;
         }
 
-        // Handle returns (UPDATED LOGIC)
+        
         if (text.includes('return') || text.includes('refund')) {
             userSessions[userId] = { expectingReturnInfo: true };
             const reply = `🔄 Return Assistance
 
-You can place a return request within 7 days of delivery.
+        You can place a return request within 7 days of delivery.
 
-Please provide your Order ID first:`;
+        Please provide your Order ID first:`;
             await logChat(userId, message, reply, attachments);
             return reply;
         }
 
-        // Handle greetings
+       
         if (text.includes('hello') || text.includes('hi') || text.includes('hey')) {
             const reply = `👋 Hello!
 
@@ -288,7 +287,7 @@ How can I assist you today?`;
             return reply;
         }
 
-        // Handle help queries
+       
         if (text.includes('help') || text.includes('support')) {
             const reply = `💬 How can I help?
 
@@ -301,8 +300,6 @@ How can I assist you today?`;
             await logChat(userId, message, reply, attachments);
             return reply;
         }
-
-        // Handle agent request
         if (text.includes('agent') || text.includes('human') || text.includes('representative')) {
             const reply = `👨‍💼 Support Agent
 
@@ -312,8 +309,6 @@ You can also WhatsApp us at [Chat Now](#).` + thankYouMessage;
             await logChat(userId, message, reply, attachments);
             return reply;
         }
-
-        // Default response
         const defaultReply = `🤖 I didn't understand that.
 
 I can help you with:
@@ -331,11 +326,28 @@ For direct support:
         console.error('Error in chatbot processing:', error);
         const errorReply = `❌ Error
 
-Sorry, there was an error processing your request. Please try again or contact support at +91-9778466748.` + thankYouMessage;
+        Sorry, there was an error processing your request. Please try again or contact support at +91-9778466748.` + thankYouMessage;
         await logChat(userId, message, errorReply, attachments);
         return errorReply;
     }
 };
+
+router.patch('/chat-logs/:id/mark-read', async (req, res) => {
+    try {
+        const chat = await ChatLog.findByIdAndUpdate(
+            req.params.id,
+            { resolved: true },
+            { new: true }
+        );
+        if (!chat) {
+            return res.status(404).json({ error: 'Chat not found' });
+        }
+        res.json(chat);
+    } catch (error) {
+        console.error('Error marking chat as read:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
 
 // POST route for chat
 router.post('/chat', async (req, res) => {
@@ -364,33 +376,23 @@ router.post('/chat', async (req, res) => {
     }
 });
 
-// Route to get chat history for admin panel with search functionality
 router.get('/chat-logs', async (req, res) => {
     try {
         const { userId, phone, limit = 50, search } = req.query;
         let query = {};
-        
-        // If userId is provided
         if (userId) {
             query.userId = userId;
         }
-        
-        // If phone number is provided
         if (phone) {
-            // First find users with this phone number
             const users = await User.find({ phone }).select('_id');
             const userIds = users.map(user => user._id);
-            
-            // Add to query
             if (userIds.length > 0) {
                 query.userId = { $in: userIds };
             } else {
-                // No users found with this phone number
                 return res.json([]);
             }
         }
         
-        // General text search (searches both userMessage and botReply)
         if (search) {
             query.$or = [
                 { userMessage: { $regex: search, $options: 'i' } },
@@ -401,7 +403,7 @@ router.get('/chat-logs', async (req, res) => {
         const logs = await ChatLog.find(query)
             .sort({ timestamp: -1 })
             .limit(parseInt(limit))
-            .populate('userId', 'name email phone'); // Include phone in the populated fields
+            .populate('userId', 'name email phone');
             
         res.json(logs);
     } catch (error) {
@@ -410,7 +412,6 @@ router.get('/chat-logs', async (req, res) => {
     }
 });
 
-// Route to get chat by ID
 router.get('/chat-logs/:id', async (req, res) => {
     try {
         const chat = await ChatLog.findById(req.params.id);
