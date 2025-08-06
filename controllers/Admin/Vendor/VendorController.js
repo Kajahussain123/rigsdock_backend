@@ -742,7 +742,6 @@ const setupReportScheduler = () => {
           errorCount++;
         }
       }
-
       console.log(
         `Monthly report generation completed. Success: ${successCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`
       );

@@ -5,8 +5,15 @@ exports.getCheckoutDetails = async (req, res) => {
     try {
         const { userId } = req.params;
 
-        const cart = await Cart.findOne({ user: userId }).populate("items.product");
-
+        const cart = await Cart.findOne({ user: userId })
+            .populate({
+                path: "items.product",
+                populate: {
+                    path: "brand", 
+                    model: "Brand",
+                },
+            });
+        ;
         if (!cart || cart.items.length === 0) {
             return res.status(400).json({ message: "Cart is empty" });
         }

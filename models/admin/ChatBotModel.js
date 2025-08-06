@@ -24,7 +24,7 @@ const ChatLogSchema = new mongoose.Schema({
     resolved: {
         type: Boolean,
         default: false
-    }
+    },
 });
 
 module.exports = mongoose.model('ChatLog', ChatLogSchema);
